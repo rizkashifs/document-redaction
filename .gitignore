@@ -1,0 +1,7 @@
+temp_images/
+input_folder/
+output_folder/
+__pycache__/
+.ipynb_checkpoints/
+*.pyc
+.env
