@@ -106,11 +106,15 @@ Identify and replace:
   preceded by role labels such as "Claimant:", "Patient:", "Provider:", "Insured:",
   "Applicant:", "Member:", "Beneficiary:", etc.
 - Email addresses
-- Phone numbers
+- Phone and fax numbers
 - Social Security Numbers (SSN) or national identifiers
+- Driver's license or state ID numbers
 - Physical mailing addresses
-- Dates of Birth (DOB)
+- Dates of Birth (DOB) and any other individual-linked dates: date of injury, date of service,
+  admission/discharge dates, appointment dates
 - Medical record numbers or identifiers
+- Insurance, policy, group, claim, and member ID numbers
+- Bank account numbers, routing numbers, or credit card numbers
 - Any specific medical diagnoses or conditions tied to individuals
 
 Requirements:
