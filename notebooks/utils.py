@@ -2,7 +2,7 @@
 Shared utilities for the document-redaction pipeline.
 
 Usage in any notebook:
-    from utils import get_logger, extract_json
+    from utils import get_logger, extract_json, validate_mapping
     logger = get_logger("01_setup")
 """
 
@@ -90,3 +90,30 @@ def extract_json(raw: str) -> dict:
         f"Could not extract JSON from model response. Raw (first 300 chars): {preview}",
         raw, 0
     )
+
+
+_STOP_WORDS = {"", "mr", "dr", "ms", "jr", "sr", "i", "ii", "iii"}
+
+
+def validate_mapping(result: dict) -> list[dict]:
+    """
+    Check each mapping row for word-overlap between original_masked and replacement.
+
+    Words are extracted by stripping asterisks and splitting on whitespace/hyphens.
+    Common titles and suffixes are excluded as stop words.
+
+    Returns the list of rows that are violations (original and replacement share a word).
+    """
+    violations = []
+    for row in result.get("mapping", []):
+        orig_words = (
+            {w.lower() for w in re.split(r"[\s*\-]+", row.get("original_masked", ""))}
+            - _STOP_WORDS
+        )
+        repl_words = (
+            {w.lower() for w in re.split(r"[\s\-]+", row.get("replacement", ""))}
+            - _STOP_WORDS
+        )
+        if orig_words & repl_words:
+            violations.append(row)
+    return violations

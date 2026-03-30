@@ -43,7 +43,7 @@ Install required libraries and configure AWS credentials for Bedrock access.
 #### Step 2 — PDF to Images
 For each `.pdf` in `input_folder`:
 - Open the PDF with PyMuPDF
-- Render each page as a PNG (230 DPI in notebook 02; 150 DPI in notebook 05 for faster processing — higher DPI improves accuracy on complex or small-text documents)
+- Render each page as a PNG (230 DPI in notebook 02; 230 DPI in notebook 05 — higher DPI improves accuracy on complex or small-text documents)
 - Save to `temp_images/` as `{filename}_page_{n}.png`
 
 #### Step 3 — Vision-Based Sanitization (Bedrock)
