@@ -1,6 +1,6 @@
 # Document Redaction Pipeline
 
-Automated PII/PHI redaction for PDF documents using AWS Bedrock (Claude claude-opus-4-6 vision).
+Automated PII/PHI redaction for PDF documents using AWS Bedrock (Claude 3.7 Sonnet vision).
 
 ---
 
@@ -8,7 +8,7 @@ Automated PII/PHI redaction for PDF documents using AWS Bedrock (Claude claude-o
 
 ### Overview
 
-Process PDFs from a local `input_folder`, redact all PII/PHI using Claude claude-opus-4-6 vision via AWS Bedrock, and write clean PDFs to `output_folder`. Non-sensitive text is preserved verbatim.
+Process PDFs from a local `input_folder`, redact all PII/PHI using Claude 3.7 Sonnet vision via AWS Bedrock, and write clean PDFs to `output_folder`. Non-sensitive text is preserved verbatim. Each source document produces **two output files**: a sanitized content PDF and a standalone summary PDF listing every replacement made.
 
 ```
 input_folder/
@@ -21,8 +21,10 @@ temp_images/                        ← auto-created, auto-cleaned
   └── document_b_page_1.png
 
 output_folder/
-  ├── redacted_document_a.pdf
-  └── redacted_document_b.pdf
+  ├── redacted_document_a.pdf       ← sanitized content only
+  ├── summary_document_a.pdf        ← PII/PHI replacement table
+  ├── redacted_document_b.pdf
+  └── summary_document_b.pdf
 ```
 
 ---
@@ -41,12 +43,12 @@ Install required libraries and configure AWS credentials for Bedrock access.
 #### Step 2 — PDF to Images
 For each `.pdf` in `input_folder`:
 - Open the PDF with PyMuPDF
-- Render each page as a PNG at 150–200 DPI
+- Render each page as a PNG (230 DPI in notebook 02; 150 DPI in notebook 05 for faster processing — higher DPI improves accuracy on complex or small-text documents)
 - Save to `temp_images/` as `{filename}_page_{n}.png`
 
 #### Step 3 — Vision-Based Sanitization (Bedrock)
 For each page image:
-- Send the image to Claude claude-opus-4-6 via `bedrock-runtime` (`InvokeModel`)
+- Send the image to Claude 3.7 Sonnet via `bedrock-runtime` (`InvokeModel`)
 - The model replaces every PII/PHI item with a **realistic, fictitious dummy value** — not a blank or `[REDACTED]` tag
 - The same original value gets the **same replacement** throughout the entire document (cross-page consistency enforced by carrying the mapping forward with each page call)
 - Model responds as JSON: `{ "sanitized_text": "...", "mapping": [{...}] }`
@@ -57,25 +59,37 @@ For each page image:
 **Bedrock model ID:** `us.anthropic.claude-3-7-sonnet-20250219-v1:0`
 
 #### Step 4 — PDF Reconstruction
-For each source PDF:
-- Collate the sanitized text from all pages in order (one PDF page per original page)
-- Append a final **Summary Table** page listing every original→replacement mapping
-- Save as `output_folder/redacted_{original_filename}.pdf`
+For each source PDF, two files are written to `output_folder/`:
+- `redacted_{stem}.pdf` — sanitized content only, one page per original page
+- `summary_{stem}.pdf` — standalone PII/PHI replacement table listing every original→replacement mapping
 
 #### Step 5 — Cleanup
 Delete all files in `temp_images/` after the PDF is successfully written.
 
 ---
 
+### Running the Pipeline
+
+There are three usage paths:
+
+**Quick / normal use — run `05_pipeline.ipynb` alone.**
+Notebook 05 is a fully self-contained end-to-end pipeline. It installs its own dependencies, creates its own Bedrock client, and handles PDF rendering, redaction, and reconstruction internally. You do **not** need to run notebooks 01–04 first.
+
+**Optional pre-flight check — run `01_setup.ipynb` before notebook 05.**
+Use this if you want to verify AWS credentials and Bedrock connectivity before committing to a full pipeline run. It's a diagnostic sanity check, not a prerequisite — notebook 05 does not depend on anything notebook 01 produces.
+
+**Step-by-step / debugging — run `01` → `02` → `03` → `04` in order.**
+Useful for inspecting intermediate outputs (page images, per-page JSON responses) or resuming after a failure at a specific stage.
+
 ### Notebook Structure
 
 | Notebook | Purpose |
 |---|---|
-| `01_setup.ipynb` | Install deps, verify Bedrock access, test with a single image |
-| `02_pdf_to_images.ipynb` | Batch convert all PDFs to page images |
-| `03_redact_via_bedrock.ipynb` | Run vision redaction on all images |
-| `04_reconstruct_pdf.ipynb` | Collate text and write output PDFs |
-| `05_pipeline.ipynb` | End-to-end single notebook combining all steps |
+| `01_setup.ipynb` | Install deps, verify Bedrock access, smoke-test with a synthetic image |
+| `02_pdf_to_images.ipynb` | Batch convert all PDFs to page images (230 DPI) |
+| `03_redact_via_bedrock.ipynb` | Run vision redaction on all images, cache per-page JSON |
+| `04_reconstruct_pdf.ipynb` | Collate cached JSON and write redacted + summary PDFs |
+| `05_pipeline.ipynb` | **Self-contained end-to-end pipeline** — runs steps 02–04 internally |
 
 ---
 
@@ -137,8 +151,8 @@ document-redaction/
 ### AWS Requirements
 
 - IAM role/user with `bedrock:InvokeModel` permission
-- Bedrock model access enabled for `claude-opus-4-6` in your AWS region
-- Region: configure in notebook (e.g. `us-east-2`)
+- Bedrock model access enabled for `us.anthropic.claude-3-7-sonnet-20250219-v1:0` in your AWS region
+- Region: `us-east-2` (configured in each notebook's config cell)
 
 ---
 
