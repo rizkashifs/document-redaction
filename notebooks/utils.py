@@ -8,6 +8,7 @@ Usage in any notebook:
 
 import json
 import logging
+import random
 import re
 import sys
 from pathlib import Path
@@ -117,3 +118,70 @@ def validate_mapping(result: dict) -> list[dict]:
         if orig_words & repl_words:
             violations.append(row)
     return violations
+
+
+# ── Synthetic replacement fallback ─────────────────────────────
+
+_FIRST_NAMES = [
+    "Alex", "Diana", "James", "Sofia", "Marcus", "Elena", "Ryan", "Priya",
+    "Luca", "Mei", "Carlos", "Nora", "Dmitri", "Zara", "Felix", "Amara",
+    "Owen", "Yuki", "Hassan", "Clara", "Tobias", "Ines", "Rohan", "Vera",
+]
+_LAST_NAMES = [
+    "Chen", "Rivera", "Patel", "Kim", "Santos", "Novak", "Okafor", "Berg",
+    "Tanaka", "Dubois", "Walsh", "Reyes", "Larsen", "Bakshi", "Cruz", "Holm",
+    "Quinn", "Sato", "Ghosh", "Voss", "Marin", "Falk", "Zheng", "Byrne",
+]
+
+
+def generate_replacement(row_type: str) -> str:
+    """Generate a random fictitious replacement value for the given PII type."""
+    if row_type == "Name":
+        return f"{random.choice(_FIRST_NAMES)} {random.choice(_LAST_NAMES)}"
+    elif row_type == "SSN":
+        return f"{random.randint(100, 999)}-{random.randint(10, 99)}-{random.randint(1000, 9999)}"
+    elif row_type == "DOB":
+        return f"{random.randint(1, 12):02d}/{random.randint(1, 28):02d}/{random.randint(1950, 2000)}"
+    elif row_type == "Phone":
+        return f"({random.randint(200, 999)}) {random.randint(200, 999)}-{random.randint(1000, 9999)}"
+    elif row_type == "Email":
+        return f"{random.choice(_FIRST_NAMES).lower()}.{random.choice(_LAST_NAMES).lower()}@example.com"
+    elif row_type == "MRN":
+        return f"MRN-{random.randint(100000, 999999)}"
+    elif row_type == "CreditCard":
+        return f"XXXX-XXXX-XXXX-{random.randint(1000, 9999)}"
+    elif row_type == "Diagnosis":
+        return "[Redacted diagnosis]"
+    else:
+        return f"[REDACTED-{random.randint(1000, 9999)}]"
+
+
+def fix_remaining_violations(result: dict, violations: list[dict], logger=None) -> None:
+    """
+    Last-resort fix: generate synthetic replacements for mapping rows that
+    still violate the no-word-overlap rule after the model retry.
+
+    Modifies result["mapping"] and result["sanitized_text"] in place.
+    """
+    for row in violations:
+        old_val = row["replacement"]
+        row_type = row.get("type", "")
+
+        # Generate a candidate that doesn't overlap with original_masked words
+        new_val = None
+        for _ in range(10):
+            candidate = generate_replacement(row_type)
+            test = {"mapping": [{"original_masked": row["original_masked"],
+                                 "replacement": candidate, "type": row_type}]}
+            if not validate_mapping(test):
+                new_val = candidate
+                break
+        if new_val is None:
+            new_val = generate_replacement(row_type)  # use anyway
+
+        if old_val and old_val in result.get("sanitized_text", ""):
+            result["sanitized_text"] = result["sanitized_text"].replace(old_val, new_val)
+        row["replacement"] = new_val
+        if logger:
+            logger.warning("Synthetic fix: %s → %s (%s)",
+                           row["original_masked"], new_val, row_type)
