@@ -54,7 +54,7 @@ For each page image:
 
 **PII/PHI categories:** full names, email addresses, phone numbers, SSNs, mailing addresses, dates of birth, medical record numbers, individual-linked diagnoses
 
-**Bedrock model ID:** `us.anthropic.claude-opus-4-6-20251101-v1:0`
+**Bedrock model ID:** `us.anthropic.claude-3-7-sonnet-20250219-v1:0`
 
 #### Step 4 — PDF Reconstruction
 For each source PDF:
@@ -138,7 +138,7 @@ document-redaction/
 
 - IAM role/user with `bedrock:InvokeModel` permission
 - Bedrock model access enabled for `claude-opus-4-6` in your AWS region
-- Region: configure in notebook (e.g. `us-east-1`)
+- Region: configure in notebook (e.g. `us-east-2`)
 
 ---
 
