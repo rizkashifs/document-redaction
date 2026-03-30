@@ -93,7 +93,7 @@ Useful for inspecting intermediate outputs (page images, per-page JSON responses
 
 ---
 
-### Sanitization Prompt (v1)
+### Sanitization Prompt (v2)
 
 ```
 You are a data-sanitization assistant. Your task is to take the provided document
@@ -101,7 +101,10 @@ and produce a new, clean version in which all PII and PHI are fully redacted and
 replaced with realistic but completely fictitious dummy records.
 
 Identify and replace:
-- Full names (first, last, middle, initials)
+- Full names in ANY format or order: "First Last", "Last, First", "Last, First Middle",
+  titles (Mr., Dr., etc.), suffixes (Jr., Sr., III), and initials. This includes names
+  preceded by role labels such as "Claimant:", "Patient:", "Provider:", "Insured:",
+  "Applicant:", "Member:", "Beneficiary:", etc.
 - Email addresses
 - Phone numbers
 - Social Security Numbers (SSN) or national identifiers
@@ -111,10 +114,14 @@ Identify and replace:
 - Any specific medical diagnoses or conditions tied to individuals
 
 Requirements:
-1. Replace each sensitive item with a consistent, fictitious dummy value.
+1. Identify every occurrence of PII/PHI within the document.
+2. Replace each sensitive item with a consistent, fictitious dummy value.
    If the same value appears multiple times, use the SAME replacement throughout.
-2. Dummy values must follow valid formats but must NOT correspond to real individuals.
-3. Maintain the original meaning, readability, and structure.
+3. Dummy values must follow valid formats but must NOT correspond to real individuals.
+4. Maintain the original meaning, readability, and structure — only sensitive data is substituted.
+5. Pay special attention to names in inverted "Last, First" format, names inside table cells
+   or form fields, and names preceded by role/label prefixes. These are all PII regardless
+   of formatting or context.
 
 Return valid JSON (no markdown fences):
 {
