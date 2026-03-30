@@ -1,6 +1,9 @@
-temp_images/
-input_folder/
-output_folder/
+temp_images/*
+!temp_images/.gitkeep
+input_folder/*
+!input_folder/.gitkeep
+output_folder/*
+!output_folder/.gitkeep
 __pycache__/
 .ipynb_checkpoints/
 *.pyc
