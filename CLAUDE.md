@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-JupyterLab pipeline that redacts PII/PHI from PDFs using AWS Bedrock (Claude claude-3-7-sonnet). Each PDF page is rendered as an image, sent to the vision model, and the model returns sanitized text with realistic fictitious dummy values (not blank redactions) plus a mapping table. Output is a reconstructed PDF with a summary table appended.
+JupyterLab pipeline that redacts PII/PHI from PDFs using AWS Bedrock (Claude claude-3-7-sonnet). Each PDF page is rendered as an image, sent to the vision model, and the model returns sanitized text with realistic fictitious dummy values (not blank redactions) plus a mapping table. Output is two PDFs per source document: a redacted content PDF and a standalone summary PDF listing every replacement made.
 
 ## AWS configuration
 
@@ -31,11 +31,11 @@ notebooks/
 
 ## Running the pipeline
 
-**Normal use:** open `05_pipeline.ipynb`, drop PDFs into `input_folder/`, set `AWS_REGION` / `BEDROCK_MODEL` in the config cell, then Run All.
+**Normal use:** open `05_pipeline.ipynb`, drop PDFs into `input_folder/`, set `AWS_REGION` / `BEDROCK_MODEL` in the config cell, then Run All. Notebook 05 is fully self-contained — it installs its own dependencies, creates its own Bedrock client, and does not require running any other notebook first.
 
-**Step-by-step:** run notebooks `01` → `02` → `03` → `04` in order. Each notebook is self-contained (installs its own deps at the top).
+**Optional pre-flight check:** run `01_setup.ipynb` to verify AWS credentials and Bedrock connectivity before committing to a full pipeline run. This is a diagnostic sanity check, not a prerequisite.
 
-**First time / connectivity check:** run `01_setup.ipynb` — it installs packages, pings Bedrock, and runs a synthetic PII smoke test end-to-end.
+**Step-by-step / debugging:** run notebooks `01` → `02` → `03` → `04` in order. Each notebook is self-contained (installs its own deps at the top). This path is useful for inspecting intermediate outputs or resuming after a failure at a specific stage.
 
 ## Key design decisions
 
@@ -54,6 +54,19 @@ Each page's JSON response is saved to `redacted_text/{stem}_page_{n}.json`. Re-r
 
 ### Cleanup
 `CLEAN_UP = True` in `05_pipeline.ipynb` deletes `temp_images/` PNGs and `redacted_text/` JSONs after each PDF is successfully written. Set to `False` to keep intermediates for debugging.
+
+### PII/PHI categories (v2)
+The sanitization prompt targets exactly these categories:
+- Full names (any format including "Last, First", with role labels like "Claimant:", "Patient:", etc.)
+- Email addresses
+- Phone and fax numbers
+- SSNs / national identifiers
+- Dates of Birth (DOB only — not date of service, date of injury, etc.)
+- Medical record numbers (MRN, patient ID, chart number)
+- Medical diagnoses / conditions tied to individuals
+- Credit card details (card numbers, expiration dates, CVVs)
+
+All other data (addresses, insurance/policy/claim numbers, non-DOB dates, facility names, etc.) is explicitly left unchanged.
 
 ## Shared utilities (`notebooks/utils.py`)
 
