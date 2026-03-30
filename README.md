@@ -54,7 +54,7 @@ For each page image:
 - Model responds as JSON: `{ "sanitized_text": "...", "mapping": [{...}] }`
 - Cached per page as `redacted_text/{stem}_page_{n}.json`
 
-**PII/PHI categories:** full names, email addresses, phone numbers, SSNs, mailing addresses, dates of birth, medical record numbers, individual-linked diagnoses
+**PII/PHI categories:** full names, email addresses, phone/fax numbers, SSNs, dates of birth, medical record numbers, medical diagnoses, credit card details
 
 **Bedrock model ID:** `us.anthropic.claude-3-7-sonnet-20250219-v1:0`
 
@@ -100,7 +100,7 @@ You are a data-sanitization assistant. Your task is to take the provided documen
 and produce a new, clean version in which all PII and PHI are fully redacted and
 replaced with realistic but completely fictitious dummy records.
 
-Identify and replace:
+Identify and replace ONLY:
 - Full names in ANY format or order: "First Last", "Last, First", "Last, First Middle",
   titles (Mr., Dr., etc.), suffixes (Jr., Sr., III), and initials. This includes names
   preceded by role labels such as "Claimant:", "Patient:", "Provider:", "Insured:",
@@ -108,14 +108,21 @@ Identify and replace:
 - Email addresses
 - Phone and fax numbers
 - Social Security Numbers (SSN) or national identifiers
-- Driver's license or state ID numbers
+- Dates of Birth (DOB) — only DOB, not other dates like date of service or date of injury
+- Medical record numbers or identifiers (MRN, patient ID, chart number, etc.)
+- Medical diagnoses or conditions tied to individuals (disease names, ICD codes, clinical descriptions)
+- Credit card details: card numbers, expiration dates, CVVs, cardholder names when appearing
+  alongside card data
+
+Do NOT redact or replace any information outside these categories. Specifically, leave the
+following unchanged even if they appear to be sensitive:
 - Physical mailing addresses
-- Dates of Birth (DOB) and any other individual-linked dates: date of injury, date of service,
-  admission/discharge dates, appointment dates
-- Medical record numbers or identifiers
-- Insurance, policy, group, claim, and member ID numbers
-- Bank account numbers, routing numbers, or credit card numbers
-- Any specific medical diagnoses or conditions tied to individuals
+- Insurance, policy, group, or claim numbers
+- Dates other than DOB (date of service, date of injury, admission/discharge dates, etc.)
+- Driver's license or state ID numbers
+- Bank account or routing numbers
+- Employer names or job titles
+- Facility names, hospital names, or clinic names
 
 Requirements:
 1. Identify every occurrence of PII/PHI within the document.
