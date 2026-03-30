@@ -1,12 +1,14 @@
 """
-Shared logging utility for the document-redaction pipeline.
+Shared utilities for the document-redaction pipeline.
 
 Usage in any notebook:
-    from utils import get_logger
-    logger = get_logger(__name__)   # or get_logger("01_setup")
+    from utils import get_logger, extract_json
+    logger = get_logger("01_setup")
 """
 
+import json
 import logging
+import re
 import sys
 from pathlib import Path
 
@@ -44,3 +46,47 @@ def get_logger(name: str, level: int = logging.DEBUG) -> logging.Logger:
 
     _configured.add(name)
     return logger
+
+
+def extract_json(raw: str) -> dict:
+    """
+    Robustly parse a JSON object from a model response that may contain
+    markdown fences, leading/trailing prose, or extra whitespace.
+
+    Strategy (each step tried in order):
+    1. Direct parse after stripping whitespace.
+    2. Strip ```json ... ``` or ``` ... ``` fences, then parse.
+    3. Regex-extract the first {...} block that spans the whole depth, then parse.
+
+    Raises json.JSONDecodeError if all strategies fail, with the raw
+    response logged so callers can debug.
+    """
+    # Step 1 — direct parse
+    cleaned = raw.strip()
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    # Step 2 — strip markdown fences
+    fenced = re.sub(r"^```(?:json)?\s*", "", cleaned, flags=re.IGNORECASE)
+    fenced = re.sub(r"\s*```$", "", fenced).strip()
+    try:
+        return json.loads(fenced)
+    except json.JSONDecodeError:
+        pass
+
+    # Step 3 — extract first complete {...} block
+    match = re.search(r"\{.*\}", fenced, flags=re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group())
+        except json.JSONDecodeError:
+            pass
+
+    # All strategies exhausted — raise with context
+    preview = raw[:300].replace("\n", "\\n")
+    raise json.JSONDecodeError(
+        f"Could not extract JSON from model response. Raw (first 300 chars): {preview}",
+        raw, 0
+    )
