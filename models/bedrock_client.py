@@ -10,6 +10,8 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 # Try config/env first (Jupyter/SageMaker friendly), fall back to .env
 _env_path = _PROJECT_ROOT / "config" / "env"
 if not _env_path.exists():
+    _env_path = _PROJECT_ROOT / "config" / "env.txt"
+if not _env_path.exists():
     _env_path = _PROJECT_ROOT / ".env"
 load_dotenv(_env_path)
 
