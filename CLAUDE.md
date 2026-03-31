@@ -8,10 +8,22 @@ JupyterLab pipeline that redacts PII/PHI from PDFs using AWS Bedrock (Claude cla
 
 ## AWS configuration
 
-- **Region:** `us-east-2`
-- **Model:** `us.anthropic.claude-3-7-sonnet-20250219-v1:0`
+- **Region:** `us-east-2` (configurable via `AWS_REGION` env var)
+- **Default model:** `us.anthropic.claude-3-7-sonnet-20250219-v1:0` (configurable in `config/models.json`)
 - **Required IAM permission:** `bedrock:InvokeModel`
-- Credentials are resolved via the standard boto3 chain (env vars, `~/.aws/credentials`, instance role)
+- Credentials are resolved by `models/bedrock_client.py` in this order:
+  1. STS assume-role if `BEDROCK_ROLE_ARN` is set (recommended for Lambda / SageMaker)
+  2. Explicit `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` from `.env`
+  3. boto3 default chain (env vars, `~/.aws/credentials`, instance role)
+- See `.env.example` for configuration template
+
+## Model selection
+
+Available models are defined in `config/models.json`. To switch models, either:
+- Change `"default"` in `config/models.json`, or
+- Set `SELECTED_MODEL = "haiku 4.5"` (or any key) in the notebook config cell
+
+All notebooks import the Bedrock client from `models/bedrock_client.py` — they do not create their own.
 
 ## Folder layout
 
@@ -20,6 +32,11 @@ input_folder/     ← drop source PDFs here (contents gitignored)
 output_folder/    ← redacted PDFs written here (contents gitignored)
 temp_images/      ← per-page PNGs during processing (contents gitignored)
 redacted_text/    ← per-page JSON cache created at runtime (not committed)
+config/
+  models.json     ← model catalogue + default selection
+models/
+  bedrock_client.py ← centralized Bedrock client (STS assume-role, .env, default chain)
+  __init__.py
 notebooks/
   utils.py        ← shared logger + JSON parser (imported by all notebooks)
   01_setup.ipynb  ← install deps, test Bedrock connection, smoke test
@@ -27,11 +44,12 @@ notebooks/
   03_redact_via_bedrock.ipynb
   04_reconstruct_pdf.ipynb
   05_pipeline.ipynb  ← end-to-end; run this for normal use
+.env.example      ← template for AWS credentials / role ARN
 ```
 
 ## Running the pipeline
 
-**Normal use:** open `05_pipeline.ipynb`, drop PDFs into `input_folder/`, set `AWS_REGION` / `BEDROCK_MODEL` in the config cell, then Run All. Notebook 05 is fully self-contained — it installs its own dependencies, creates its own Bedrock client, and does not require running any other notebook first.
+**Normal use:** open `05_pipeline.ipynb`, drop PDFs into `input_folder/`, optionally set `SELECTED_MODEL` in the config cell, then Run All. Notebook 05 is fully self-contained — it installs its own dependencies and does not require running any other notebook first.
 
 **Optional pre-flight check:** run `01_setup.ipynb` to verify AWS credentials and Bedrock connectivity before committing to a full pipeline run. This is a diagnostic sanity check, not a prerequisite.
 
@@ -100,6 +118,7 @@ logger = get_logger("02_pdf_to_images")
 Import pattern — redaction notebooks (03, 05):
 ```python
 from utils import get_logger, extract_json, validate_mapping, fix_remaining_violations, enforce_replacements_in_text
+from models import get_bedrock_client, resolve_model_id
 ```
 
 ## Git

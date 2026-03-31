@@ -56,7 +56,7 @@ For each page image:
 
 **PII/PHI categories:** full names, email addresses, phone/fax numbers, SSNs, dates of birth, medical record numbers, medical diagnoses, credit card details
 
-**Bedrock model ID:** `us.anthropic.claude-3-7-sonnet-20250219-v1:0`
+**Bedrock model:** configurable via `config/models.json` (default: Claude 3.7 Sonnet). Available: Sonnet 3.7, Haiku 4.5, Sonnet 4.5, Opus 4.6
 
 #### Step 4 — PDF Reconstruction
 For each source PDF, two files are written to `output_folder/`:
@@ -126,10 +126,17 @@ Violations trigger a targeted Bedrock retry to fix just the bad rows. If that al
 ```
 document-redaction/
   ├── README.md
+  ├── .env.example           ← AWS credentials template
+  ├── config/
+  │     └── models.json      ← model catalogue + default selection
+  ├── models/
+  │     ├── __init__.py
+  │     └── bedrock_client.py ← centralized Bedrock client
   ├── input_folder/          ← place source PDFs here
   ├── output_folder/         ← redacted PDFs written here
   ├── temp_images/           ← auto-managed, not committed
   └── notebooks/
+        ├── utils.py
         ├── 01_setup.ipynb
         ├── 02_pdf_to_images.ipynb
         ├── 03_redact_via_bedrock.ipynb
@@ -142,8 +149,10 @@ document-redaction/
 ### AWS Requirements
 
 - IAM role/user with `bedrock:InvokeModel` permission
-- Bedrock model access enabled for `us.anthropic.claude-3-7-sonnet-20250219-v1:0` in your AWS region
-- Region: `us-east-2` (configured in each notebook's config cell)
+- Bedrock model access enabled for the selected model in your AWS region
+- Region: `us-east-2` (configurable via `AWS_REGION` env var or `.env` file)
+- Credentials: copy `.env.example` to `.env` and configure. Supports STS assume-role (`BEDROCK_ROLE_ARN`), explicit keys, or the default boto3 chain
+- All notebooks use a centralized Bedrock client from `models/bedrock_client.py`
 
 ---
 
