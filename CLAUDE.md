@@ -71,6 +71,9 @@ All other data (addresses, insurance/policy/claim numbers, non-DOB dates, facili
 ### Checkbox / form field handling
 The prompt explicitly instructs the model to preserve checkbox states: `[X]` for checked boxes, `[ ]` for unchecked. Checkmarks (✓, ☑) are transcribed as `[X]`; empty boxes (☐, ○) as `[ ]`. The model must not leave all boxes unchecked.
 
+### Multi-column layout handling
+For scanned forms with side-by-side sections (left/right columns), the prompt instructs the model to transcribe each column completely before moving to the next, using separators like `--- LEFT COLUMN ---` / `--- RIGHT COLUMN ---`. This prevents interleaving lines from different columns in the output.
+
 ### Replacement validation
 After each Bedrock response, `validate_mapping()` checks every mapping row for two kinds of violations:
 1. **Word overlap** — the replacement shares a word with the masked original (e.g. "M*** Holmes" → "Margaret Holmes").

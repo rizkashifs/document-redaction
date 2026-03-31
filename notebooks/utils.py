@@ -184,6 +184,14 @@ def generate_replacement(row_type: str) -> str:
         return f"[REDACTED-{random.randint(1000, 9999)}]"
 
 
+def _case_insensitive_replace(text: str, old: str, new: str) -> str:
+    """Replace all occurrences of `old` in `text` case-insensitively."""
+    if not old:
+        return text
+    pattern = re.compile(re.escape(old), re.IGNORECASE)
+    return pattern.sub(new, text)
+
+
 def fix_remaining_violations(result: dict, violations: list[dict], logger=None) -> None:
     """
     Last-resort fix: generate synthetic replacements for mapping rows that
@@ -207,8 +215,10 @@ def fix_remaining_violations(result: dict, violations: list[dict], logger=None) 
         if new_val is None:
             new_val = generate_replacement(row_type)  # use anyway
 
-        if old_val and old_val in result.get("sanitized_text", ""):
-            result["sanitized_text"] = result["sanitized_text"].replace(old_val, new_val)
+        if old_val:
+            result["sanitized_text"] = _case_insensitive_replace(
+                result.get("sanitized_text", ""), old_val, new_val
+            )
         row["replacement"] = new_val
         if logger:
             logger.warning("Synthetic fix: %s → %s (%s)",
@@ -220,17 +230,15 @@ def _build_mask_regex(masked: str) -> re.Pattern | None:
     Build a regex from a masked string that matches the original value.
 
     Works character-by-character:
-    - '*' becomes a wildcard matching one word/digit char: [\\w]
-    - Consecutive '*'s become [\\w]{n} (matching exactly n word chars)
+    - Consecutive '*'s become [\\w]{n,} (n or more word chars — lenient because
+      models often write fewer asterisks than the actual character count)
     - Literal characters are escaped and matched exactly
     - Whitespace in the mask matches flexible whitespace (\\s+)
 
     Examples:
-      "J*** S***"       → J[\\w]{3}\\s+S[\\w]{3}
-      "***-**-6789"     → [\\w]{3}-[\\w]{2}-6789
-      "**/**/1972"      → [\\w]{2}/[\\w]{2}/1972
-      "(***) ***-1234"  → \\([\\w]{3}\\)\\s+[\\w]{3}-1234
-      "j***.s***@e*.com" → j[\\w]{3}\\.s[\\w]{3}@e[\\w]+\\.com
+      "J*** S***"        matches "John Smith" and "JONATHAN SMITHSON"
+      "***-**-6789"      matches "123-45-6789"
+      "**/**/1972"       matches "03/14/1972"
 
     Returns None if the mask has no asterisks.
     """
@@ -247,12 +255,12 @@ def _build_mask_regex(masked: str) -> re.Pattern | None:
             while i < len(masked) and masked[i] == "*":
                 i += 1
             count = i - star_start
-            regex += rf"[\w]{{{count}}}"
+            # Use {n,} (n or more) — models often undercount asterisks
+            regex += rf"[\w]{{{count},}}"
         elif ch in " \t":
             # Whitespace — match flexible whitespace
             regex += r"\s+"
             i += 1
-            # Skip consecutive whitespace in mask
             while i < len(masked) and masked[i] in " \t":
                 i += 1
         else:
@@ -269,7 +277,11 @@ def enforce_replacements_in_text(result: dict, logger=None) -> int:
     """
     Check that each mapping replacement actually appears in sanitized_text.
     If a replacement is missing, the model likely left the original in the text.
-    Use the mask pattern to find and replace the original with the replacement.
+
+    Strategy (tried in order for each missing replacement):
+    1. Use the mask pattern regex to find the leaked original in the text.
+    2. If mask has no asterisks (model wrote full original), use the mask
+       value itself as a case-insensitive search term.
 
     Returns the number of fixes applied.
     """
@@ -280,24 +292,40 @@ def enforce_replacements_in_text(result: dict, logger=None) -> int:
         replacement = row.get("replacement", "")
         orig_masked = row.get("original_masked", "")
 
-        if not replacement or replacement in text:
-            continue  # replacement is present — nothing to fix
-
-        # Replacement is missing from text — try to find the original via mask pattern
-        pattern = _build_mask_regex(orig_masked)
-        if pattern is None:
+        if not replacement:
             continue
 
-        match = pattern.search(text)
-        if match:
-            original_found = match.group()
-            text = text.replace(original_found, replacement)
-            fixes += 1
-            if logger:
-                logger.warning(
-                    "Text fix: replaced '%s' with '%s' (mask: %s)",
-                    original_found, replacement, orig_masked
-                )
+        # Case-insensitive check for replacement presence
+        if re.search(re.escape(replacement), text, re.IGNORECASE):
+            continue  # replacement is present — nothing to fix
+
+        # Strategy 1: mask pattern regex (works when mask has asterisks)
+        pattern = _build_mask_regex(orig_masked)
+        if pattern is not None:
+            match = pattern.search(text)
+            if match:
+                original_found = match.group()
+                text = _case_insensitive_replace(text, original_found, replacement)
+                fixes += 1
+                if logger:
+                    logger.warning(
+                        "Text fix (mask regex): replaced '%s' with '%s' (mask: %s)",
+                        original_found, replacement, orig_masked
+                    )
+                continue
+
+        # Strategy 2: no asterisks — model wrote the full original in original_masked
+        # Use it directly as a case-insensitive search term
+        if orig_masked and "*" not in orig_masked:
+            if re.search(re.escape(orig_masked), text, re.IGNORECASE):
+                text = _case_insensitive_replace(text, orig_masked, replacement)
+                fixes += 1
+                if logger:
+                    logger.warning(
+                        "Text fix (literal): replaced '%s' with '%s'",
+                        orig_masked, replacement
+                    )
+                continue
 
     if fixes:
         result["sanitized_text"] = text
