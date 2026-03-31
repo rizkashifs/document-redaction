@@ -8,7 +8,7 @@ Automated PII/PHI redaction for PDF documents using AWS Bedrock (Claude 3.7 Sonn
 
 ### Overview
 
-Process PDFs from a local `input_folder`, redact all PII/PHI using Claude 3.7 Sonnet vision via AWS Bedrock, and write clean PDFs to `output_folder`. Non-sensitive text is preserved verbatim. Each source document produces **two output files**: a sanitized content PDF and a standalone summary PDF listing every replacement made.
+Process PDFs from a local `input_folder`, redact all PII/PHI using Claude 3.7 Sonnet vision via AWS Bedrock, and write clean PDFs to `output_folder`. Non-sensitive text is preserved verbatim. Each source document produces **three output files**: a sanitized content PDF, a standalone summary PDF listing every replacement made, and a governance JSON log with per-page redaction details for audit/compliance.
 
 ```
 input_folder/
@@ -23,8 +23,10 @@ temp_images/                        ← auto-created, auto-cleaned
 output_folder/
   ├── redacted_document_a.pdf       ← sanitized content only
   ├── summary_document_a.pdf        ← PII/PHI replacement table
+  ├── governance_document_a.json    ← per-page redaction audit log
   ├── redacted_document_b.pdf
-  └── summary_document_b.pdf
+  ├── summary_document_b.pdf
+  └── governance_document_b.json
 ```
 
 ---
@@ -59,9 +61,10 @@ For each page image:
 **Bedrock model:** configurable via `config/models.json` (default: Claude 3.7 Sonnet). Available: Sonnet 3.7, Haiku 4.5, Sonnet 4.5, Opus 4.6
 
 #### Step 4 — PDF Reconstruction
-For each source PDF, two files are written to `output_folder/`:
+For each source PDF, three files are written to `output_folder/`:
 - `redacted_{stem}.pdf` — sanitized content only, one page per original page
 - `summary_{stem}.pdf` — standalone PII/PHI replacement table listing every original→replacement mapping
+- `governance_{stem}.json` — machine-readable audit log with per-page redaction details, model IDs, timestamps, and consolidated mapping with page references
 
 #### Step 5 — Cleanup
 Delete all files in `temp_images/` after the PDF is successfully written.
@@ -135,7 +138,7 @@ document-redaction/
   │     ├── __init__.py
   │     └── bedrock_client.py ← centralized Bedrock client
   ├── input_folder/          ← place source PDFs here
-  ├── output_folder/         ← redacted PDFs written here
+  ├── output_folder/         ← redacted PDFs + governance JSONs written here
   ├── temp_images/           ← auto-managed, not committed
   └── notebooks/
         ├── utils.py
@@ -165,7 +168,7 @@ document-redaction/
 | Text-only output — original layout/fonts not preserved | Use PDF overlay / bounding-box redaction |
 | No confidence scoring on redactions | Add a review pass or secondary model check |
 | Single-threaded per page | Parallelize with `concurrent.futures` |
-| No audit log of what was redacted | Log redacted spans per page to JSON |
+| ~~No audit log of what was redacted~~ | ✅ Resolved — `governance_{stem}.json` logs per-page redactions |
 | Scanned PDFs with poor image quality may degrade accuracy | Pre-process with image enhancement |
 
 ---
@@ -175,5 +178,5 @@ document-redaction/
 - S3-based pipeline (replace local folders with buckets — see `notebooks/s3-pipeline-code.py`)
 - Layout-preserving redaction using bounding boxes
 - Parallel processing across documents
-- Audit trail JSON per document
+- ~~Audit trail JSON per document~~ (done — `governance_{stem}.json`)
 - CI/CD deployment via Lambda or ECS
