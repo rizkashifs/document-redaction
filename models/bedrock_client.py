@@ -5,9 +5,13 @@ from pathlib import Path
 import boto3
 from dotenv import load_dotenv
 
-# Load .env from project root (two levels up from models/)
+# Load env file from config/ (project root is one level up from models/)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
-load_dotenv(_PROJECT_ROOT / ".env")
+# Try config/env first (Jupyter/SageMaker friendly), fall back to .env
+_env_path = _PROJECT_ROOT / "config" / "env"
+if not _env_path.exists():
+    _env_path = _PROJECT_ROOT / ".env"
+load_dotenv(_env_path)
 
 # Resolve logger — works whether called from notebooks/ or project root
 import sys

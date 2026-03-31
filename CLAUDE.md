@@ -13,9 +13,9 @@ JupyterLab pipeline that redacts PII/PHI from PDFs using AWS Bedrock (Claude cla
 - **Required IAM permission:** `bedrock:InvokeModel`
 - Credentials are resolved by `models/bedrock_client.py` in this order:
   1. STS assume-role if `BEDROCK_ROLE_ARN` is set (recommended for Lambda / SageMaker)
-  2. Explicit `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` from `.env`
+  2. Explicit `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` from `config/env`
   3. boto3 default chain (env vars, `~/.aws/credentials`, instance role)
-- See `.env.example` for configuration template
+- See `config/env.example` for configuration template
 
 ## Model selection
 
@@ -44,7 +44,7 @@ notebooks/
   03_redact_via_bedrock.ipynb
   04_reconstruct_pdf.ipynb
   05_pipeline.ipynb  ← end-to-end; run this for normal use
-.env.example      ← template for AWS credentials / role ARN
+config/env.example      ← template for AWS credentials / role ARN
 ```
 
 ## Running the pipeline

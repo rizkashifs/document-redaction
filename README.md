@@ -126,7 +126,7 @@ Violations trigger a targeted Bedrock retry to fix just the bad rows. If that al
 ```
 document-redaction/
   ├── README.md
-  ├── .env.example           ← AWS credentials template
+  ├── config/env.example           ← AWS credentials template
   ├── config/
   │     └── models.json      ← model catalogue + default selection
   ├── models/
@@ -150,8 +150,8 @@ document-redaction/
 
 - IAM role/user with `bedrock:InvokeModel` permission
 - Bedrock model access enabled for the selected model in your AWS region
-- Region: `us-east-2` (configurable via `AWS_REGION` env var or `.env` file)
-- Credentials: copy `.env.example` to `.env` and configure. Supports STS assume-role (`BEDROCK_ROLE_ARN`), explicit keys, or the default boto3 chain
+- Region: `us-east-2` (configurable via `AWS_REGION` env var or `config/env` file)
+- Credentials: copy `config/env.example` to `.env` and configure. Supports STS assume-role (`BEDROCK_ROLE_ARN`), explicit keys, or the default boto3 chain
 - All notebooks use a centralized Bedrock client from `models/bedrock_client.py`
 
 ---
