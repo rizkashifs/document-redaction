@@ -101,6 +101,14 @@ When violations are found, a targeted retry asks Bedrock to fix just the bad row
 
 As a final safety net, `enforce_replacements_in_text()` checks that every mapping replacement actually appears in `sanitized_text`. If a replacement is missing (meaning the model left the original in the text despite reporting a correct mapping), it uses the mask pattern to regex-find the leaked original and substitutes the replacement.
 
+### LLM-based PII leak audit
+After programmatic validation, a second Bedrock call using a cheaper model (Haiku 4.5, configurable via `audit_model` in `config/models.json`) audits the `sanitized_text` against the mapping. The audit model receives the full text, the mapping, and a list of known replacements (so it doesn't flag intentional fictitious values). It checks for:
+1. **Missed originals** — values matching a mask pattern that weren't replaced
+2. **Identity replacements** — mapping rows where replacement ≈ original
+3. **Unmapped PII** — PII-shaped values not accounted for in any mapping row
+
+Organization/company/church names are explicitly excluded from audit flags. If leaks are found, they are auto-fixed (matched to existing mapping or given synthetic replacements). The audit is best-effort — if the call fails, the pipeline continues.
+
 ## Shared utilities (`notebooks/utils.py`)
 
 - `get_logger(name)` — returns a named `logging.Logger` writing to stdout; idempotent (safe to call in re-run cells)
@@ -108,6 +116,7 @@ As a final safety net, `enforce_replacements_in_text()` checks that every mappin
 - `validate_mapping(result)` — checks mapping rows for word-overlap and echo violations; returns list of bad rows
 - `fix_remaining_violations(result, violations, logger)` — last-resort synthetic replacement generator; modifies result in place
 - `enforce_replacements_in_text(result, logger)` — verifies each mapping replacement actually appears in `sanitized_text`; if missing, uses the mask pattern to find and replace the leaked original
+- `audit_sanitized_text(result, bedrock_client, audit_model_id, logger)` — second Bedrock call (Haiku 4.5) to audit for leaked PII; auto-fixes any leaks found
 
 Import pattern — non-redaction notebooks:
 ```python
@@ -117,8 +126,8 @@ logger = get_logger("02_pdf_to_images")
 
 Import pattern — redaction notebooks (03, 05):
 ```python
-from utils import get_logger, extract_json, validate_mapping, fix_remaining_violations, enforce_replacements_in_text
-from models import get_bedrock_client, resolve_model_id
+from utils import get_logger, extract_json, validate_mapping, fix_remaining_violations, enforce_replacements_in_text, audit_sanitized_text
+from models import get_bedrock_client, resolve_model_id, get_audit_model_id
 ```
 
 ## Git

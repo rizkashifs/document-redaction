@@ -335,3 +335,171 @@ def enforce_replacements_in_text(result: dict, logger=None) -> int:
     if fixes:
         result["sanitized_text"] = text
     return fixes
+
+
+# ── LLM-based PII leak audit ─────────────────────────────────
+
+_AUDIT_PROMPT = """You are a PII/PHI leak auditor. You will receive:
+1. A sanitized document page (sanitized_text)
+2. A replacement mapping showing what was redacted
+
+Your job is to find PII/PHI that LEAKED through — values that should have been replaced but weren't.
+
+IMPORTANT: The replacement values in the mapping are INTENTIONAL fictitious values. Do NOT flag them.
+The mapping tells you exactly which values are legitimate replacements — treat them as safe.
+
+Here are the known replacement values (do NOT flag these):
+<<REPLACEMENT_LIST>>
+
+Check for these specific leak types:
+
+A) MISSED ORIGINALS: Values in the text that match an original_masked pattern from the mapping \
+but were NOT replaced. Example: mapping has "J*** S***" → "Alex Rivera", but text still \
+contains "John Smith" somewhere.
+
+B) IDENTITY REPLACEMENTS: Mapping rows where the replacement is identical or nearly identical \
+to the original_masked (ignoring asterisks). Example: "J*** S***" → "John Smith" \
+means the "replacement" IS the original — it was not actually replaced.
+
+C) UNMAPPED PII: PII-shaped values in the text that are NOT in the replacement list above, \
+meaning the primary model missed them entirely. Only flag these categories:
+- Full names of INDIVIDUAL PEOPLE (not organizations, companies, churches, or facilities)
+- SSN patterns (XXX-XX-XXXX)
+- DOB patterns (MM/DD/YYYY or similar date-of-birth values)
+- Email addresses
+- Phone/fax numbers
+- MRN/medical record numbers
+- Credit card numbers
+
+DO NOT flag: addresses, facility/hospital/company/church/organization names, insurance/policy/claim \
+numbers, employer names, dates of service, or other non-PII values. \
+"Pacific Ridge Casualty Company" is an organization — NOT a person's name. \
+"Diocese of Brooklyn" is an organization — NOT a person's name.
+
+Return ONLY valid JSON (no markdown fences):
+{
+  "leaks": [
+    {"value": "<the leaked value>", "type": "<Name|SSN|DOB|Email|Phone|MRN|Diagnosis|CreditCard>",
+     "reason": "<brief explanation>"}
+  ],
+  "clean": false
+}
+
+If no leaks found, return: {"leaks": [], "clean": true}
+
+--- MAPPING ---
+<<MAPPING>>
+
+--- SANITIZED TEXT ---
+<<SANITIZED_TEXT>>"""
+
+
+def audit_sanitized_text(result, bedrock_client, audit_model_id, logger=None):
+    """
+    Second Bedrock call using a cheaper model to audit sanitized_text for
+    leaked PII that the programmatic checks missed.
+
+    Checks for: missed originals, identity replacements, and unmapped PII.
+    Modifies result in place if leaks are found.
+
+    Returns the number of leaks fixed.
+    """
+    mapping = result.get("mapping", [])
+    text = result.get("sanitized_text", "")
+
+    if not text or not mapping:
+        return 0
+
+    # Build replacement list so audit model knows which values are intentional
+    replacement_list = "\n".join(
+        f"  - \"{r['replacement']}\" ({r['type']})" for r in mapping
+    )
+
+    # Build mapping section
+    mapping_section = "\n".join(
+        f"  {r['original_masked']} → {r['replacement']} ({r['type']})"
+        for r in mapping
+    )
+
+    prompt = (_AUDIT_PROMPT
+              .replace("<<REPLACEMENT_LIST>>", replacement_list)
+              .replace("<<MAPPING>>", mapping_section)
+              .replace("<<SANITIZED_TEXT>>", text))
+
+    body = {
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": 2048,
+        "messages": [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
+    }
+
+    try:
+        resp = bedrock_client.invoke_model(
+            modelId=audit_model_id,
+            body=json.dumps(body),
+            contentType="application/json",
+            accept="application/json",
+        )
+        raw = json.loads(resp["body"].read())["content"][0]["text"]
+        audit_result = extract_json(raw)
+    except Exception as exc:
+        if logger:
+            logger.warning("[audit] Audit call failed (non-blocking): %s", exc)
+        return 0
+
+    leaks = audit_result.get("leaks", [])
+    if not leaks or audit_result.get("clean", False):
+        if logger:
+            logger.info("[audit] Clean — no leaks detected")
+        return 0
+
+    if logger:
+        logger.warning("[audit] %d leak(s) detected — fixing", len(leaks))
+
+    fixes = 0
+    for leak in leaks:
+        leaked_value = leak.get("value", "")
+        leak_type = leak.get("type", "Name")
+        reason = leak.get("reason", "")
+
+        if not leaked_value:
+            continue
+
+        # Check if this leaked value is actually in the text
+        if not re.search(re.escape(leaked_value), text, re.IGNORECASE):
+            if logger:
+                logger.debug("[audit] Reported leak '%s' not found in text — skipping", leaked_value)
+            continue
+
+        # Try to match to an existing mapping row by mask pattern
+        matched_replacement = None
+        for row in mapping:
+            pattern = _build_mask_regex(row.get("original_masked", ""))
+            if pattern and pattern.fullmatch(leaked_value):
+                matched_replacement = row["replacement"]
+                break
+
+        if matched_replacement:
+            # Leaked original found — replace with the correct replacement
+            text = _case_insensitive_replace(text, leaked_value, matched_replacement)
+            fixes += 1
+            if logger:
+                logger.warning("[audit] Fixed leak: '%s' → '%s' (matched mask)",
+                               leaked_value, matched_replacement)
+        else:
+            # Unmapped PII — generate synthetic replacement
+            new_val = generate_replacement(leak_type)
+            text = _case_insensitive_replace(text, leaked_value, new_val)
+            mapping.append({
+                "original_masked": leaked_value[:1] + "*" * (len(leaked_value) - 1),
+                "replacement": new_val,
+                "type": leak_type,
+            })
+            fixes += 1
+            if logger:
+                logger.warning("[audit] Fixed unmapped leak: '%s' → '%s' (%s)",
+                               leaked_value, new_val, leak_type)
+
+    if fixes:
+        result["sanitized_text"] = text
+
+    return fixes

@@ -42,6 +42,13 @@ def get_default_model_id() -> str:
     return cfg["models"][default_name]
 
 
+def get_audit_model_id() -> str:
+    """Return the Bedrock model ID for the audit/validation model."""
+    cfg = _load_model_config()
+    audit_name = cfg.get("audit_model", "haiku 4.5")
+    return cfg["models"][audit_name]
+
+
 def resolve_model_id(model_name: str | None = None) -> str:
     """
     Resolve a friendly model name to a Bedrock model ID.
