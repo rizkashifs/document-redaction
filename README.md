@@ -117,6 +117,8 @@ After each Bedrock response, `validate_mapping()` in `utils.py` runs two automat
 
 Violations trigger a targeted Bedrock retry to fix just the bad rows. If that also fails, `fix_remaining_violations()` generates synthetic random replacements as a last resort.
 
+3. **Text enforcement** — as a final safety net, `enforce_replacements_in_text()` verifies each replacement actually appears in `sanitized_text`. If a replacement is missing (model left the original in the text despite reporting a correct mapping), the mask pattern is used to regex-find the leaked original and substitute the replacement.
+
 ---
 
 ### Folder Structure

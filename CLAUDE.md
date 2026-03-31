@@ -78,12 +78,15 @@ After each Bedrock response, `validate_mapping()` checks every mapping row for t
 
 When violations are found, a targeted retry asks Bedrock to fix just the bad rows. If violations persist after the retry, `fix_remaining_violations()` generates synthetic random replacements as a last resort and patches both the mapping and `sanitized_text` in place.
 
+As a final safety net, `enforce_replacements_in_text()` checks that every mapping replacement actually appears in `sanitized_text`. If a replacement is missing (meaning the model left the original in the text despite reporting a correct mapping), it uses the mask pattern to regex-find the leaked original and substitutes the replacement.
+
 ## Shared utilities (`notebooks/utils.py`)
 
 - `get_logger(name)` — returns a named `logging.Logger` writing to stdout; idempotent (safe to call in re-run cells)
 - `extract_json(raw)` — parses JSON from model response with fence-stripping and regex fallback
 - `validate_mapping(result)` — checks mapping rows for word-overlap and echo violations; returns list of bad rows
 - `fix_remaining_violations(result, violations, logger)` — last-resort synthetic replacement generator; modifies result in place
+- `enforce_replacements_in_text(result, logger)` — verifies each mapping replacement actually appears in `sanitized_text`; if missing, uses the mask pattern to find and replace the leaked original
 
 Import pattern — non-redaction notebooks:
 ```python
@@ -93,7 +96,7 @@ logger = get_logger("02_pdf_to_images")
 
 Import pattern — redaction notebooks (03, 05):
 ```python
-from utils import get_logger, extract_json, validate_mapping, fix_remaining_violations
+from utils import get_logger, extract_json, validate_mapping, fix_remaining_violations, enforce_replacements_in_text
 ```
 
 ## Git

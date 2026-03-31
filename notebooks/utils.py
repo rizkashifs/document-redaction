@@ -100,23 +100,18 @@ def _unmask_matches(masked: str, candidate: str) -> bool:
     """
     Check if `candidate` could be the unmasked version of `masked`.
 
-    For example: masked="J*** S***" matches candidate="John Smith"
-    because J matches J and S matches S, with asterisks standing in for
-    the remaining characters.
+    Uses _build_mask_regex to generate a pattern from the mask, then
+    checks if the candidate matches it exactly (full-string match).
+
+    Examples:
+      "J*** S***"    matches "John Smith"     → True
+      "***-**-6789"  matches "123-45-6789"    → True
+      "J*** S***"    matches "Diana Chen"     → False
     """
-    masked_parts = masked.split()
-    candidate_parts = candidate.split()
-    if len(masked_parts) != len(candidate_parts):
+    pattern = _build_mask_regex(masked)
+    if pattern is None:
         return False
-    for m, c in zip(masked_parts, candidate_parts):
-        m_stripped = m.rstrip("*").lower()
-        c_lower = c.lower()
-        if not m_stripped:
-            continue
-        if c_lower.startswith(m_stripped) and len(c) >= len(m):
-            continue
-        return False
-    return True
+    return pattern.fullmatch(candidate) is not None
 
 
 def validate_mapping(result: dict) -> list[dict]:
@@ -218,3 +213,92 @@ def fix_remaining_violations(result: dict, violations: list[dict], logger=None) 
         if logger:
             logger.warning("Synthetic fix: %s → %s (%s)",
                            row["original_masked"], new_val, row_type)
+
+
+def _build_mask_regex(masked: str) -> re.Pattern | None:
+    """
+    Build a regex from a masked string that matches the original value.
+
+    Works character-by-character:
+    - '*' becomes a wildcard matching one word/digit char: [\\w]
+    - Consecutive '*'s become [\\w]{n} (matching exactly n word chars)
+    - Literal characters are escaped and matched exactly
+    - Whitespace in the mask matches flexible whitespace (\\s+)
+
+    Examples:
+      "J*** S***"       → J[\\w]{3}\\s+S[\\w]{3}
+      "***-**-6789"     → [\\w]{3}-[\\w]{2}-6789
+      "**/**/1972"      → [\\w]{2}/[\\w]{2}/1972
+      "(***) ***-1234"  → \\([\\w]{3}\\)\\s+[\\w]{3}-1234
+      "j***.s***@e*.com" → j[\\w]{3}\\.s[\\w]{3}@e[\\w]+\\.com
+
+    Returns None if the mask has no asterisks.
+    """
+    if "*" not in masked:
+        return None
+
+    regex = ""
+    i = 0
+    while i < len(masked):
+        ch = masked[i]
+        if ch == "*":
+            # Count consecutive asterisks
+            star_start = i
+            while i < len(masked) and masked[i] == "*":
+                i += 1
+            count = i - star_start
+            regex += rf"[\w]{{{count}}}"
+        elif ch in " \t":
+            # Whitespace — match flexible whitespace
+            regex += r"\s+"
+            i += 1
+            # Skip consecutive whitespace in mask
+            while i < len(masked) and masked[i] in " \t":
+                i += 1
+        else:
+            regex += re.escape(ch)
+            i += 1
+
+    try:
+        return re.compile(regex, re.IGNORECASE)
+    except re.error:
+        return None
+
+
+def enforce_replacements_in_text(result: dict, logger=None) -> int:
+    """
+    Check that each mapping replacement actually appears in sanitized_text.
+    If a replacement is missing, the model likely left the original in the text.
+    Use the mask pattern to find and replace the original with the replacement.
+
+    Returns the number of fixes applied.
+    """
+    text = result.get("sanitized_text", "")
+    fixes = 0
+
+    for row in result.get("mapping", []):
+        replacement = row.get("replacement", "")
+        orig_masked = row.get("original_masked", "")
+
+        if not replacement or replacement in text:
+            continue  # replacement is present — nothing to fix
+
+        # Replacement is missing from text — try to find the original via mask pattern
+        pattern = _build_mask_regex(orig_masked)
+        if pattern is None:
+            continue
+
+        match = pattern.search(text)
+        if match:
+            original_found = match.group()
+            text = text.replace(original_found, replacement)
+            fixes += 1
+            if logger:
+                logger.warning(
+                    "Text fix: replaced '%s' with '%s' (mask: %s)",
+                    original_found, replacement, orig_masked
+                )
+
+    if fixes:
+        result["sanitized_text"] = text
+    return fixes
