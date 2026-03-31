@@ -166,7 +166,7 @@ document-redaction/
 | Limitation | Phase 2 Mitigation |
 |---|---|
 | Text-only output — original layout/fonts not preserved | Use PDF overlay / bounding-box redaction |
-| No confidence scoring on redactions | Add a review pass or secondary model check |
+| ~~No confidence scoring on redactions~~ | ✅ Resolved — LLM leak audit via secondary model (Haiku 4.5) |
 | Single-threaded per page | Parallelize with `concurrent.futures` |
 | ~~No audit log of what was redacted~~ | ✅ Resolved — `governance_{stem}.json` logs per-page redactions |
 | Scanned PDFs with poor image quality may degrade accuracy | Pre-process with image enhancement |
