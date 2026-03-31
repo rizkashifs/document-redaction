@@ -127,6 +127,11 @@ def validate_mapping(result: dict) -> list[dict]:
         orig_masked = row.get("original_masked", "")
         replacement = row.get("replacement", "")
 
+        # Check 0: exact or case-insensitive match (most obvious violation)
+        if orig_masked.lower().replace("*", "") == replacement.lower().replace("*", ""):
+            violations.append(row)
+            continue
+
         # Check 1: word overlap (existing logic)
         orig_words = (
             {w.lower() for w in re.split(r"[\s*\-]+", orig_masked)}
