@@ -167,7 +167,7 @@ document-redaction/
 |---|---|
 | Text-only output — original layout/fonts not preserved | Use PDF overlay / bounding-box redaction |
 | ~~No confidence scoring on redactions~~ | ✅ Resolved — LLM leak audit via secondary model (Haiku 4.5) |
-| Single-threaded per page | Parallelize with `concurrent.futures` |
+| ~~Single-threaded per page~~ | ✅ Resolved — parallel document processing via `ThreadPoolExecutor` (configurable `MAX_WORKERS`) |
 | ~~No audit log of what was redacted~~ | ✅ Resolved — `governance_{stem}.json` logs per-page redactions |
 | Scanned PDFs with poor image quality may degrade accuracy | Pre-process with image enhancement |
 
@@ -177,6 +177,6 @@ document-redaction/
 
 - S3-based pipeline (replace local folders with buckets — see `notebooks/s3-pipeline-code.py`)
 - Layout-preserving redaction using bounding boxes
-- Parallel processing across documents
+- ~~Parallel processing across documents~~ (done — `ThreadPoolExecutor` with `MAX_WORKERS`)
 - ~~Audit trail JSON per document~~ (done — `governance_{stem}.json`)
 - CI/CD deployment via Lambda or ECS
