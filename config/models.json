@@ -5,5 +5,5 @@
         "sonnet 4.5": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
         "opus 4.6": "us.anthropic.claude-opus-4-6-v1"
     },
-    "default": "sonnet 3.7"
+    "default": "opus 4.6"
 }
