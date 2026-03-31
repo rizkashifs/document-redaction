@@ -1,6 +1,6 @@
 # Document Redaction Pipeline
 
-Automated PII/PHI redaction for PDF documents using AWS Bedrock (Claude 3.7 Sonnet vision).
+Automated PII/PHI redaction for PDF documents using AWS Bedrock (via Claude).
 
 ---
 
