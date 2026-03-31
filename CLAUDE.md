@@ -55,7 +55,7 @@ Each page's JSON response is saved to `redacted_text/{stem}_page_{n}.json`. Re-r
 ### Cleanup
 `CLEAN_UP = True` in `05_pipeline.ipynb` deletes `temp_images/` PNGs and `redacted_text/` JSONs after each PDF is successfully written. Set to `False` to keep intermediates for debugging.
 
-### PII/PHI categories (v2)
+### PII/PHI categories
 The sanitization prompt targets exactly these categories:
 - Full names (any format including "Last, First", with role labels like "Claimant:", "Patient:", etc.)
 - Email addresses
@@ -68,15 +68,32 @@ The sanitization prompt targets exactly these categories:
 
 All other data (addresses, insurance/policy/claim numbers, non-DOB dates, facility names, etc.) is explicitly left unchanged.
 
+### Checkbox / form field handling
+The prompt explicitly instructs the model to preserve checkbox states: `[X]` for checked boxes, `[ ]` for unchecked. Checkmarks (✓, ☑) are transcribed as `[X]`; empty boxes (☐, ○) as `[ ]`. The model must not leave all boxes unchecked.
+
+### Replacement validation
+After each Bedrock response, `validate_mapping()` checks every mapping row for two kinds of violations:
+1. **Word overlap** — the replacement shares a word with the masked original (e.g. "M*** Holmes" → "Margaret Holmes").
+2. **Echo detection** — the replacement matches the unmasked pattern of `original_masked` (e.g. "J*** S***" → "John Smith"), caught by `_unmask_matches()`.
+
+When violations are found, a targeted retry asks Bedrock to fix just the bad rows. If violations persist after the retry, `fix_remaining_violations()` generates synthetic random replacements as a last resort and patches both the mapping and `sanitized_text` in place.
+
 ## Shared utilities (`notebooks/utils.py`)
 
 - `get_logger(name)` — returns a named `logging.Logger` writing to stdout; idempotent (safe to call in re-run cells)
 - `extract_json(raw)` — parses JSON from model response with fence-stripping and regex fallback
+- `validate_mapping(result)` — checks mapping rows for word-overlap and echo violations; returns list of bad rows
+- `fix_remaining_violations(result, violations, logger)` — last-resort synthetic replacement generator; modifies result in place
 
-Import pattern used in every notebook:
+Import pattern — non-redaction notebooks:
 ```python
 from utils import get_logger, extract_json
 logger = get_logger("02_pdf_to_images")
+```
+
+Import pattern — redaction notebooks (03, 05):
+```python
+from utils import get_logger, extract_json, validate_mapping, fix_remaining_violations
 ```
 
 ## Git

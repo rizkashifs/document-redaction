@@ -8,7 +8,16 @@
       "Bash(cmd /c \"python -c \"\"import boto3, json; client = boto3.client\\(''bedrock'', region_name=''us-east-2''\\); r = client.list_foundation_models\\(byProvider=''Anthropic''\\); print\\(json.dumps\\([m[''modelId''] for m in r[''modelSummaries'']], indent=2\\)\\)\"\"\")",
       "Bash(cmd /c \"python -c \"\"import boto3, json; client = boto3.client\\(''bedrock'', region_name=''us-east-2''\\); r = client.list_foundation_models\\(byProvider=''Anthropic''\\); print\\(len\\(r[''modelSummaries'']\\)\\); [print\\(m[''modelId'']\\) for m in r[''modelSummaries'']]\"\" 2>&1\")",
       "Bash(grep -v \"^$\")",
-      "Bash(grep -o 'if key in fix_map.[^}]*new_val\\\\\\\\n' \"c:/Users/703440258/OneDrive - Genpact/Documents/document-redaction/notebooks/03_redact_via_bedrock.ipynb\")"
+      "Bash(grep -o 'if key in fix_map.[^}]*new_val\\\\\\\\n' \"c:/Users/703440258/OneDrive - Genpact/Documents/document-redaction/notebooks/03_redact_via_bedrock.ipynb\")",
+      "Bash(where python:*)",
+      "Bash(ls /c/Python*/python.exe)",
+      "Read(//c/Users/703440258/AppData/Local/Programs/**)",
+      "Bash(conda info:*)",
+       "Bash(git *)",
+      "Bash(npm run *)",
+      "Bash(ls *)",
+      "Bash(mkdir *)",
+      "Bash(cat *)"
     ]
   }
 }

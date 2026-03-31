@@ -96,27 +96,60 @@ def extract_json(raw: str) -> dict:
 _STOP_WORDS = {"", "mr", "dr", "ms", "jr", "sr", "i", "ii", "iii"}
 
 
+def _unmask_matches(masked: str, candidate: str) -> bool:
+    """
+    Check if `candidate` could be the unmasked version of `masked`.
+
+    For example: masked="J*** S***" matches candidate="John Smith"
+    because J matches J and S matches S, with asterisks standing in for
+    the remaining characters.
+    """
+    masked_parts = masked.split()
+    candidate_parts = candidate.split()
+    if len(masked_parts) != len(candidate_parts):
+        return False
+    for m, c in zip(masked_parts, candidate_parts):
+        m_stripped = m.rstrip("*").lower()
+        c_lower = c.lower()
+        if not m_stripped:
+            continue
+        if c_lower.startswith(m_stripped) and len(c) >= len(m):
+            continue
+        return False
+    return True
+
+
 def validate_mapping(result: dict) -> list[dict]:
     """
-    Check each mapping row for word-overlap between original_masked and replacement.
+    Check each mapping row for:
+    1. Word-overlap between original_masked and replacement (after stripping asterisks).
+    2. Replacement that looks like the unmasked original (model echoed the real value).
 
-    Words are extracted by stripping asterisks and splitting on whitespace/hyphens.
-    Common titles and suffixes are excluded as stop words.
-
-    Returns the list of rows that are violations (original and replacement share a word).
+    Returns the list of rows that are violations.
     """
     violations = []
     for row in result.get("mapping", []):
+        orig_masked = row.get("original_masked", "")
+        replacement = row.get("replacement", "")
+
+        # Check 1: word overlap (existing logic)
         orig_words = (
-            {w.lower() for w in re.split(r"[\s*\-]+", row.get("original_masked", ""))}
+            {w.lower() for w in re.split(r"[\s*\-]+", orig_masked)}
             - _STOP_WORDS
         )
         repl_words = (
-            {w.lower() for w in re.split(r"[\s\-]+", row.get("replacement", ""))}
+            {w.lower() for w in re.split(r"[\s\-]+", replacement)}
             - _STOP_WORDS
         )
         if orig_words & repl_words:
             violations.append(row)
+            continue
+
+        # Check 2: replacement matches the mask pattern (e.g. "J*** S***" → "John Smith")
+        if "*" in orig_masked and _unmask_matches(orig_masked, replacement):
+            violations.append(row)
+            continue
+
     return violations
 
 
