@@ -64,7 +64,44 @@ For each page image:
 For each source PDF, three files are written to `output_folder/`:
 - `redacted_{stem}.pdf` — sanitized content only, one page per original page
 - `summary_{stem}.pdf` — standalone PII/PHI replacement table listing every original→replacement mapping
-- `governance_{stem}.json` — machine-readable audit log with per-page redaction details, model IDs, timestamps, and consolidated mapping with page references
+- `governance_{stem}.json` — machine-readable audit log (see schema below)
+
+**Governance JSON schema (`governance_{stem}.json`):**
+
+```json
+{
+  "source_file": "claim_001.pdf",
+  "processed_at": "2026-03-31T14:22:05Z",
+  "model_id": "us.anthropic.claude-3-7-sonnet-...",
+  "audit_model_id": "us.anthropic.claude-haiku-4-5-...",
+  "total_pages": 3,
+  "total_redactions": 8,
+  "categories_found": ["DOB", "Name", "Phone", "SSN"],
+  "pages": [
+    {
+      "page_number": 1,
+      "redactions": [
+        {"original_masked": "J*** S***", "replacement": "Alex Rivera", "type": "Name"},
+        {"original_masked": "***-**-6789", "replacement": "456-78-9012", "type": "SSN"}
+      ]
+    }
+  ],
+  "consolidated_mapping": [
+    {"original_masked": "J*** S***", "replacement": "Alex Rivera", "type": "Name", "pages": [1, 3]}
+  ]
+}
+```
+
+| Field | Description |
+|---|---|
+| `source_file` | Original PDF filename |
+| `processed_at` | UTC timestamp of processing |
+| `model_id` / `audit_model_id` | Bedrock model IDs used for redaction and leak audit |
+| `total_pages` | Number of pages in the source PDF |
+| `total_redactions` | Sum of redaction entries across all pages (counts per-page occurrences, not unique values) |
+| `categories_found` | Deduplicated list of PII/PHI types detected |
+| `pages` | Per-page breakdown — each page lists its own redaction entries |
+| `consolidated_mapping` | Deduplicated entries with a `pages` array showing which pages each unique redaction appeared on |
 
 #### Step 5 — Cleanup
 Delete all files in `temp_images/` after the PDF is successfully written.

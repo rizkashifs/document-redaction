@@ -70,6 +70,12 @@ Within a single PDF, the accumulated `mapping` list from all previously processe
 ### Page caching
 Each page's JSON response is saved to `redacted_text/{stem}_page_{n}.json`. Re-running a notebook skips pages that already have a cache file — safe to resume after failures.
 
+### Governance JSON
+Each processed PDF produces `output_folder/governance_{stem}.json` — a machine-readable audit log containing: source filename, processing timestamp, model IDs (redaction + audit), `total_pages`, `total_redactions` (sum of per-page entries, counts duplicates across pages), `categories_found` (deduplicated PII types), `pages` (per-page redaction breakdown), and `consolidated_mapping` (unique entries with a `pages` array showing which pages each appeared on).
+
+### Parallel processing
+`05_pipeline.ipynb` processes multiple PDFs concurrently via `ThreadPoolExecutor` (configurable `MAX_WORKERS`, default 3). Pages within each PDF remain sequential for cross-page mapping consistency. Each thread shares the module-level Bedrock client.
+
 ### Cleanup
 `CLEAN_UP = True` in `05_pipeline.ipynb` deletes `temp_images/` PNGs and `redacted_text/` JSONs after each PDF is successfully written. Set to `False` to keep intermediates for debugging.
 
