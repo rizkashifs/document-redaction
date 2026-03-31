@@ -4,6 +4,7 @@ input_folder/*
 !input_folder/.gitkeep
 output_folder/*
 !output_folder/.gitkeep
+logs/*.log
 __pycache__/
 .ipynb_checkpoints/
 *.pyc

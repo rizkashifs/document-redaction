@@ -22,9 +22,16 @@ _DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 _configured: set[str] = set()
 
 
+_LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
+_LOG_DIR.mkdir(exist_ok=True)
+
+
 def get_logger(name: str, level: int = logging.DEBUG) -> logging.Logger:
     """
-    Return a named logger that writes to stdout with a consistent format.
+    Return a named logger that writes to both stdout and a log file.
+
+    Log files are written to ``logs/{name}.log`` (one per notebook/module).
+    The file handler appends so logs accumulate across runs.
 
     Parameters
     ----------
@@ -38,11 +45,21 @@ def get_logger(name: str, level: int = logging.DEBUG) -> logging.Logger:
 
     logger.setLevel(level)
 
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setLevel(level)
-    handler.setFormatter(logging.Formatter(_LOG_FORMAT, datefmt=_DATE_FORMAT))
+    # Console handler (stdout)
+    console = logging.StreamHandler(sys.stdout)
+    console.setLevel(level)
+    console.setFormatter(logging.Formatter(_LOG_FORMAT, datefmt=_DATE_FORMAT))
+    logger.addHandler(console)
 
-    logger.addHandler(handler)
+    # File handler (logs/{name}_{timestamp}.log, one file per run)
+    from datetime import datetime
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    log_file = _LOG_DIR / f"{name}_{timestamp}.log"
+    file_h = logging.FileHandler(str(log_file), mode="w", encoding="utf-8")
+    file_h.setLevel(level)
+    file_h.setFormatter(logging.Formatter(_LOG_FORMAT, datefmt=_DATE_FORMAT))
+    logger.addHandler(file_h)
+
     logger.propagate = False   # prevent duplicate output from root logger
 
     _configured.add(name)
