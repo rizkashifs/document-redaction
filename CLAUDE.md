@@ -45,6 +45,7 @@ notebooks/
   04_reconstruct_pdf.ipynb
   05_pipeline.ipynb  ← end-to-end; run this for normal use
 config/env.example      ← template for AWS credentials / role ARN
+PRODUCTION_PLAN.md      ← Phase 2 architecture (S3 + Step Functions + Lambda)
 ```
 
 ## Running the pipeline
@@ -75,6 +76,12 @@ Each processed PDF produces `output_folder/governance_{stem}.json` — a machine
 
 ### Parallel processing
 `05_pipeline.ipynb` processes multiple PDFs concurrently via `ThreadPoolExecutor` (configurable `MAX_WORKERS`, default 3). Pages within each PDF remain sequential for cross-page mapping consistency. Each thread shares the module-level Bedrock client.
+
+### Per-file logging
+Each document gets its own log file at `logs/{stem}.log` with complete processing history (rendering, page-by-page redaction, violations, audit fixes, output generation, timing). The per-file logger is created via `get_file_logger(stem)` in the pipeline cell and passed through all functions via the `log=` parameter. Console output still shows INFO-level progress for all documents.
+
+### Production plan
+`PRODUCTION_PLAN.md` describes the Phase 2 architecture: S3 + Step Functions + Lambda. Event-driven, serverless, with S3-based page caching for fault-tolerant resume on Lambda timeout. Three Lambdas (render, process-page, reconstruct), DynamoDB status tracking, SQS-based concurrency control. See `PRODUCTION_PLAN.md` for full details.
 
 ### Cleanup
 `CLEAN_UP = True` in `05_pipeline.ipynb` deletes `temp_images/` PNGs and `redacted_text/` JSONs after each PDF is successfully written. Set to `False` to keep intermediates for debugging.

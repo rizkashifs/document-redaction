@@ -168,6 +168,7 @@ Violations trigger a targeted Bedrock retry to fix just the bad rows. If that al
 ```
 document-redaction/
   ├── README.md
+  ├── PRODUCTION_PLAN.md   ← Phase 2 architecture (S3 + Step Functions + Lambda)
   ├── config/env.example           ← AWS credentials template
   ├── config/
   │     └── models.json      ← model catalogue + default selection
@@ -210,10 +211,19 @@ document-redaction/
 
 ---
 
-### Phase 2 Preview
+### Phase 2 — Production Architecture
 
-- S3-based pipeline (replace local folders with buckets — see `notebooks/s3-pipeline-code.py`)
-- Layout-preserving redaction using bounding boxes
-- ~~Parallel processing across documents~~ (done — `ThreadPoolExecutor` with `MAX_WORKERS`)
-- ~~Audit trail JSON per document~~ (done — `governance_{stem}.json`)
-- CI/CD deployment via Lambda or ECS
+Full production plan: **[PRODUCTION_PLAN.md](PRODUCTION_PLAN.md)**
+
+S3 + Step Functions + Lambda pipeline — event-driven, serverless, with automatic resume on failure. Drop a PDF into S3 → get redacted output automatically. Handles thousands of documents with DynamoDB status tracking, Bedrock concurrency control, and S3-based page caching for fault tolerance.
+
+**Remaining items:**
+
+| Item | Status |
+|---|---|
+| S3-based pipeline (Step Functions + Lambda) | Designed — see [PRODUCTION_PLAN.md](PRODUCTION_PLAN.md) |
+| Layout-preserving redaction using bounding boxes | Not started |
+| ~~Parallel processing across documents~~ | ✅ Done — `ThreadPoolExecutor` with `MAX_WORKERS` |
+| ~~Audit trail JSON per document~~ | ✅ Done — `governance_{stem}.json` |
+| ~~Secondary model check~~ | ✅ Done — LLM leak audit via Haiku 4.5 |
+| CI/CD deployment via SAM/CloudFormation | Designed — see [PRODUCTION_PLAN.md](PRODUCTION_PLAN.md) |
