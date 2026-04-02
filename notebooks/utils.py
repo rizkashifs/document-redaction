@@ -297,12 +297,24 @@ def fix_remaining_violations(result: dict, violations: list[dict], logger=None) 
                            row["original_masked"], new_val, row_type)
 
 
-def check_duplicate_replacements(result: dict) -> list[dict]:
+def check_duplicate_replacements(result: dict, prior_mapping: list[dict] | None = None) -> list[dict]:
     """
     Find mapping rows where the same replacement value is used for different originals.
     Returns the duplicate rows (all except the first occurrence of each replacement).
+
+    If `prior_mapping` is provided, also checks the current page's mapping against
+    replacements already assigned on earlier pages (cross-page duplicate detection).
     """
     seen: dict[str, str] = {}  # replacement_lower → first original_masked
+
+    # Seed with prior pages' mappings so cross-page duplicates are caught
+    if prior_mapping:
+        for row in prior_mapping:
+            repl = row.get("replacement", "").lower()
+            orig = row.get("original_masked", "")
+            if repl:
+                seen[repl] = orig
+
     duplicates = []
     for row in result.get("mapping", []):
         repl = row.get("replacement", "").lower()
@@ -317,15 +329,21 @@ def check_duplicate_replacements(result: dict) -> list[dict]:
     return duplicates
 
 
-def fix_duplicate_replacements(result: dict, duplicates: list[dict], logger=None) -> None:
+def fix_duplicate_replacements(result: dict, duplicates: list[dict], logger=None,
+                               prior_mapping: list[dict] | None = None) -> None:
     """
     Regenerate replacements for rows that share a replacement value with a different original.
     Modifies result["mapping"] and result["sanitized_text"] in place.
+
+    If `prior_mapping` is provided, its replacement values are also treated as
+    taken (cross-page uniqueness).
 
     Only replaces the LAST occurrence of the duplicate in the text to avoid
     clobbering the first (correct) usage of that replacement value.
     """
     existing = {r["replacement"].lower() for r in result.get("mapping", []) if r.get("replacement")}
+    if prior_mapping:
+        existing |= {r["replacement"].lower() for r in prior_mapping if r.get("replacement")}
 
     for row in duplicates:
         old_val = row["replacement"]
