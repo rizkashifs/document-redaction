@@ -76,38 +76,54 @@ def extract_json(raw: str) -> dict:
     2. Strip ```json ... ``` or ``` ... ``` fences, then parse.
     3. Regex-extract the first {...} block that spans the whole depth, then parse.
 
+    After parsing, strips @ delimiters from mapping replacement values
+    (the model may include them despite instructions to keep mapping clean).
+
     Raises json.JSONDecodeError if all strategies fail, with the raw
     response logged so callers can debug.
     """
+    result = None
+
     # Step 1 — direct parse
     cleaned = raw.strip()
     try:
-        return json.loads(cleaned)
+        result = json.loads(cleaned)
     except json.JSONDecodeError:
         pass
 
     # Step 2 — strip markdown fences
-    fenced = re.sub(r"^```(?:json)?\s*", "", cleaned, flags=re.IGNORECASE)
-    fenced = re.sub(r"\s*```$", "", fenced).strip()
-    try:
-        return json.loads(fenced)
-    except json.JSONDecodeError:
-        pass
-
-    # Step 3 — extract first complete {...} block
-    match = re.search(r"\{.*\}", fenced, flags=re.DOTALL)
-    if match:
+    if result is None:
+        fenced = re.sub(r"^```(?:json)?\s*", "", cleaned, flags=re.IGNORECASE)
+        fenced = re.sub(r"\s*```$", "", fenced).strip()
         try:
-            return json.loads(match.group())
+            result = json.loads(fenced)
         except json.JSONDecodeError:
             pass
 
-    # All strategies exhausted — raise with context
-    preview = raw[:300].replace("\n", "\\n")
-    raise json.JSONDecodeError(
-        f"Could not extract JSON from model response. Raw (first 300 chars): {preview}",
-        raw, 0
-    )
+    # Step 3 — extract first complete {...} block
+    if result is None:
+        match = re.search(r"\{.*\}", fenced, flags=re.DOTALL)
+        if match:
+            try:
+                result = json.loads(match.group())
+            except json.JSONDecodeError:
+                pass
+
+    if result is None:
+        # All strategies exhausted — raise with context
+        preview = raw[:300].replace("\n", "\\n")
+        raise json.JSONDecodeError(
+            f"Could not extract JSON from model response. Raw (first 300 chars): {preview}",
+            raw, 0
+        )
+
+    # Strip @ delimiters from mapping replacement values
+    for row in result.get("mapping", []):
+        repl = row.get("replacement", "")
+        if repl.startswith("@") and repl.endswith("@"):
+            row["replacement"] = repl[1:-1]
+
+    return result
 
 
 _STOP_WORDS = {"", "mr", "dr", "ms", "jr", "sr", "i", "ii", "iii"}
@@ -176,34 +192,61 @@ _FIRST_NAMES = [
     "Alex", "Diana", "James", "Sofia", "Marcus", "Elena", "Ryan", "Priya",
     "Luca", "Mei", "Carlos", "Nora", "Dmitri", "Zara", "Felix", "Amara",
     "Owen", "Yuki", "Hassan", "Clara", "Tobias", "Ines", "Rohan", "Vera",
+    "Aiden", "Bianca", "Caleb", "Daria", "Ethan", "Freya", "Gabriel", "Helena",
+    "Ivan", "Jade", "Kenji", "Lila", "Mateo", "Nadine", "Oscar", "Petra",
+    "Quinn", "Rosa", "Stefan", "Tara", "Umar", "Vivian", "Wesley", "Xena",
+    "Yusuf", "Zoe", "Arjun", "Brenna", "Cyrus", "Dahlia", "Emilio", "Fiona",
+    "Grant", "Hana", "Isaiah", "Jolene", "Kai", "Leona", "Milan", "Nina",
+    "Orion", "Paloma", "Remy", "Suki", "Thiago", "Uma", "Viktor", "Wendy",
+    "Xander", "Yasmin", "Zane", "Adele", "Boris", "Celeste", "Dante", "Esme",
+    "Farid", "Greta", "Hugo", "Iris", "Jasper", "Kira", "Leo", "Mira",
+    "Nico", "Opal", "Pavel", "Renata", "Soren", "Tessa", "Ulric", "Valeria",
 ]
 _LAST_NAMES = [
     "Chen", "Rivera", "Patel", "Kim", "Santos", "Novak", "Okafor", "Berg",
     "Tanaka", "Dubois", "Walsh", "Reyes", "Larsen", "Bakshi", "Cruz", "Holm",
     "Quinn", "Sato", "Ghosh", "Voss", "Marin", "Falk", "Zheng", "Byrne",
+    "Almeida", "Becker", "Cho", "Duran", "Engel", "Ferris", "Greco", "Holt",
+    "Ivanov", "Jensen", "Kato", "Lund", "Moreau", "Nash", "Ortega", "Park",
+    "Raines", "Singh", "Torres", "Ueda", "Varga", "Wells", "Xu", "Yates",
+    "Zeller", "Ashford", "Blanco", "Carlisle", "Dhar", "Eriksen", "Franco",
+    "Gupta", "Harlow", "Ishida", "Johal", "Klein", "Liang", "Mercer", "Ngo",
+    "Olsen", "Pike", "Rossi", "Strand", "Thorne", "Uddin", "Vega", "Wirth",
+    "Yoon", "Zwick", "Archer", "Bose", "Crane", "Diaz", "Ek", "Frost",
+    "Gil", "Hess", "Iyer", "Jain", "Kern", "Lowe", "Malik", "Nord",
+    "Osei", "Roth", "Stern", "Trinh", "Varma", "Wolfe", "York", "Zhu",
 ]
 
 
-def generate_replacement(row_type: str) -> str:
-    """Generate a random fictitious replacement value for the given PII type."""
-    if row_type == "Name":
-        return f"{random.choice(_FIRST_NAMES)} {random.choice(_LAST_NAMES)}"
-    elif row_type == "SSN":
-        return f"{random.randint(100, 999)}-{random.randint(10, 99)}-{random.randint(1000, 9999)}"
-    elif row_type == "DOB":
-        return f"{random.randint(1, 12):02d}/{random.randint(1, 28):02d}/{random.randint(1950, 2000)}"
-    elif row_type == "Phone":
-        return f"({random.randint(200, 999)}) {random.randint(200, 999)}-{random.randint(1000, 9999)}"
-    elif row_type == "Email":
-        return f"{random.choice(_FIRST_NAMES).lower()}.{random.choice(_LAST_NAMES).lower()}@example.com"
-    elif row_type == "MRN":
-        return f"MRN-{random.randint(100000, 999999)}"
-    elif row_type == "CreditCard":
-        return f"XXXX-XXXX-XXXX-{random.randint(1000, 9999)}"
-    elif row_type == "Diagnosis":
-        return "[Redacted diagnosis]"
-    else:
-        return f"[REDACTED-{random.randint(1000, 9999)}]"
+def generate_replacement(row_type: str, existing: set | None = None) -> str:
+    """Generate a random fictitious replacement value for the given PII type.
+
+    If `existing` is provided (set of lowercase values already in use),
+    loops until a unique value is found (up to 20 attempts).
+    """
+    for _ in range(20):
+        if row_type == "Name":
+            val = f"{random.choice(_FIRST_NAMES)} {random.choice(_LAST_NAMES)}"
+        elif row_type == "SSN":
+            val = f"{random.randint(100, 999)}-{random.randint(10, 99)}-{random.randint(1000, 9999)}"
+        elif row_type == "DOB":
+            val = f"{random.randint(1, 12):02d}/{random.randint(1, 28):02d}/{random.randint(1950, 2000)}"
+        elif row_type == "Phone":
+            val = f"({random.randint(200, 999)}) {random.randint(200, 999)}-{random.randint(1000, 9999)}"
+        elif row_type == "Email":
+            val = f"{random.choice(_FIRST_NAMES).lower()}.{random.choice(_LAST_NAMES).lower()}@example.com"
+        elif row_type == "MRN":
+            val = f"MRN-{random.randint(100000, 999999)}"
+        elif row_type == "CreditCard":
+            val = f"XXXX-XXXX-XXXX-{random.randint(1000, 9999)}"
+        elif row_type == "Diagnosis":
+            val = "[Redacted diagnosis]"
+        else:
+            val = f"[REDACTED-{random.randint(1000, 9999)}]"
+
+        if existing is None or val.lower() not in existing:
+            return val
+    return val  # last attempt used regardless
 
 
 def _case_insensitive_replace(text: str, old: str, new: str) -> str:
@@ -221,6 +264,8 @@ def fix_remaining_violations(result: dict, violations: list[dict], logger=None) 
 
     Modifies result["mapping"] and result["sanitized_text"] in place.
     """
+    existing = {r["replacement"].lower() for r in result.get("mapping", []) if r.get("replacement")}
+
     for row in violations:
         old_val = row["replacement"]
         row_type = row.get("type", "")
@@ -228,23 +273,84 @@ def fix_remaining_violations(result: dict, violations: list[dict], logger=None) 
         # Generate a candidate that doesn't overlap with original_masked words
         new_val = None
         for _ in range(10):
-            candidate = generate_replacement(row_type)
+            candidate = generate_replacement(row_type, existing=existing)
             test = {"mapping": [{"original_masked": row["original_masked"],
                                  "replacement": candidate, "type": row_type}]}
             if not validate_mapping(test):
                 new_val = candidate
                 break
         if new_val is None:
-            new_val = generate_replacement(row_type)  # use anyway
+            new_val = generate_replacement(row_type, existing=existing)
 
         if old_val:
+            # Replace both @-wrapped and bare forms in text
             result["sanitized_text"] = _case_insensitive_replace(
-                result.get("sanitized_text", ""), old_val, new_val
+                result.get("sanitized_text", ""), f"@{old_val}@", f"@{new_val}@"
+            )
+            result["sanitized_text"] = _case_insensitive_replace(
+                result.get("sanitized_text", ""), old_val, f"@{new_val}@"
             )
         row["replacement"] = new_val
+        existing.add(new_val.lower())
         if logger:
             logger.warning("Synthetic fix: %s → %s (%s)",
                            row["original_masked"], new_val, row_type)
+
+
+def check_duplicate_replacements(result: dict) -> list[dict]:
+    """
+    Find mapping rows where the same replacement value is used for different originals.
+    Returns the duplicate rows (all except the first occurrence of each replacement).
+    """
+    seen: dict[str, str] = {}  # replacement_lower → first original_masked
+    duplicates = []
+    for row in result.get("mapping", []):
+        repl = row.get("replacement", "").lower()
+        orig = row.get("original_masked", "")
+        if not repl:
+            continue
+        if repl in seen:
+            if seen[repl] != orig:
+                duplicates.append(row)
+        else:
+            seen[repl] = orig
+    return duplicates
+
+
+def fix_duplicate_replacements(result: dict, duplicates: list[dict], logger=None) -> None:
+    """
+    Regenerate replacements for rows that share a replacement value with a different original.
+    Modifies result["mapping"] and result["sanitized_text"] in place.
+
+    Only replaces the LAST occurrence of the duplicate in the text to avoid
+    clobbering the first (correct) usage of that replacement value.
+    """
+    existing = {r["replacement"].lower() for r in result.get("mapping", []) if r.get("replacement")}
+
+    for row in duplicates:
+        old_val = row["replacement"]
+        row_type = row.get("type", "")
+        new_val = generate_replacement(row_type, existing=existing)
+
+        if old_val:
+            text = result.get("sanitized_text", "")
+            wrapped_old = f"@{old_val}@"
+            wrapped_new = f"@{new_val}@"
+            # Replace only the LAST occurrence to preserve the first (correct) one
+            idx = text.rfind(wrapped_old)
+            if idx == -1:
+                # Try case-insensitive last occurrence
+                lower_text = text.lower()
+                idx = lower_text.rfind(wrapped_old.lower())
+            if idx != -1:
+                result["sanitized_text"] = (
+                    text[:idx] + wrapped_new + text[idx + len(wrapped_old):]
+                )
+        row["replacement"] = new_val
+        existing.add(new_val.lower())
+        if logger:
+            logger.warning("Duplicate fix: %s → %s (was '%s', type: %s)",
+                           row["original_masked"], new_val, old_val, row_type)
 
 
 def _build_mask_regex(masked: str) -> re.Pattern | None:
@@ -297,13 +403,9 @@ def _build_mask_regex(masked: str) -> re.Pattern | None:
 
 def enforce_replacements_in_text(result: dict, logger=None) -> int:
     """
-    Check that each mapping replacement actually appears in sanitized_text.
-    If a replacement is missing, the model likely left the original in the text.
-
-    Strategy (tried in order for each missing replacement):
-    1. Use the mask pattern regex to find the leaked original in the text.
-    2. If mask has no asterisks (model wrote full original), use the mask
-       value itself as a case-insensitive search term.
+    Check that each mapping replacement actually appears in sanitized_text
+    (wrapped as @replacement@). If missing, the model likely left the original
+    in the text — find it via mask regex and substitute @replacement@.
 
     Returns the number of fixes applied.
     """
@@ -317,9 +419,23 @@ def enforce_replacements_in_text(result: dict, logger=None) -> int:
         if not replacement:
             continue
 
-        # Case-insensitive check for replacement presence
+        wrapped = f"@{replacement}@"
+
+        # Check for @replacement@ presence (case-insensitive)
+        if re.search(re.escape(wrapped), text, re.IGNORECASE):
+            continue  # present — nothing to fix
+
+        # Also accept bare replacement (model may not have wrapped it yet)
         if re.search(re.escape(replacement), text, re.IGNORECASE):
-            continue  # replacement is present — nothing to fix
+            # Wrap the bare occurrence
+            text = _case_insensitive_replace(text, replacement, wrapped)
+            fixes += 1
+            if logger:
+                logger.warning(
+                    "Text fix (wrap): wrapped bare '%s' as '%s'",
+                    replacement, wrapped
+                )
+            continue
 
         # Strategy 1: mask pattern regex (works when mask has asterisks)
         pattern = _build_mask_regex(orig_masked)
@@ -327,25 +443,24 @@ def enforce_replacements_in_text(result: dict, logger=None) -> int:
             match = pattern.search(text)
             if match:
                 original_found = match.group()
-                text = _case_insensitive_replace(text, original_found, replacement)
+                text = _case_insensitive_replace(text, original_found, wrapped)
                 fixes += 1
                 if logger:
                     logger.warning(
                         "Text fix (mask regex): replaced '%s' with '%s' (mask: %s)",
-                        original_found, replacement, orig_masked
+                        original_found, wrapped, orig_masked
                     )
                 continue
 
         # Strategy 2: no asterisks — model wrote the full original in original_masked
-        # Use it directly as a case-insensitive search term
         if orig_masked and "*" not in orig_masked:
             if re.search(re.escape(orig_masked), text, re.IGNORECASE):
-                text = _case_insensitive_replace(text, orig_masked, replacement)
+                text = _case_insensitive_replace(text, orig_masked, wrapped)
                 fixes += 1
                 if logger:
                     logger.warning(
                         "Text fix (literal): replaced '%s' with '%s'",
-                        orig_masked, replacement
+                        orig_masked, wrapped
                     )
                 continue
 
@@ -428,8 +543,9 @@ def audit_sanitized_text(result, bedrock_client, audit_model_id, logger=None):
         return 0
 
     # Build replacement list so audit model knows which values are intentional
+    # Include both bare and @-wrapped forms
     replacement_list = "\n".join(
-        f"  - \"{r['replacement']}\" ({r['type']})" for r in mapping
+        f"  - \"{r['replacement']}\" and \"@{r['replacement']}@\" ({r['type']})" for r in mapping
     )
 
     # Build mapping section
@@ -496,16 +612,17 @@ def audit_sanitized_text(result, bedrock_client, audit_model_id, logger=None):
                 break
 
         if matched_replacement:
-            # Leaked original found — replace with the correct replacement
-            text = _case_insensitive_replace(text, leaked_value, matched_replacement)
+            # Leaked original found — replace with the correct @-wrapped replacement
+            text = _case_insensitive_replace(text, leaked_value, f"@{matched_replacement}@")
             fixes += 1
             if logger:
-                logger.warning("[audit] Fixed leak: '%s' → '%s' (matched mask)",
+                logger.warning("[audit] Fixed leak: '%s' → '@%s@' (matched mask)",
                                leaked_value, matched_replacement)
         else:
-            # Unmapped PII — generate synthetic replacement
-            new_val = generate_replacement(leak_type)
-            text = _case_insensitive_replace(text, leaked_value, new_val)
+            # Unmapped PII — generate synthetic replacement (unique)
+            existing = {r["replacement"].lower() for r in mapping if r.get("replacement")}
+            new_val = generate_replacement(leak_type, existing=existing)
+            text = _case_insensitive_replace(text, leaked_value, f"@{new_val}@")
             mapping.append({
                 "original_masked": leaked_value[:1] + "*" * (len(leaked_value) - 1),
                 "replacement": new_val,
@@ -513,7 +630,7 @@ def audit_sanitized_text(result, bedrock_client, audit_model_id, logger=None):
             })
             fixes += 1
             if logger:
-                logger.warning("[audit] Fixed unmapped leak: '%s' → '%s' (%s)",
+                logger.warning("[audit] Fixed unmapped leak: '%s' → '@%s@' (%s)",
                                leaked_value, new_val, leak_type)
 
     if fixes:
