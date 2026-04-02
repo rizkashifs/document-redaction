@@ -133,10 +133,12 @@ Useful for inspecting intermediate outputs (page images, per-page JSON responses
 
 ---
 
-### Sanitization Prompt (v4)
+### Sanitization Prompt (v5)
 
 The prompt instructs the model to transcribe each page image and replace PII/PHI inline with fictitious values. Key features:
 
+- **@ delimiters** — replacement values are wrapped in `@` delimiters in the redacted text (e.g. `@Diana Chen@`) for easy visual identification and search. The mapping JSON, summary PDF, and governance JSON store clean values without `@`.
+- **Unique replacements** — every distinct original value gets a unique replacement. Two different people never receive the same replacement name. Enforced by prompt instruction and programmatic validation (`check_duplicate_replacements` + `fix_duplicate_replacements`).
 - **Checkbox / form field preservation** — checked boxes are transcribed as `[X]`, unchecked as `[ ]`. The model must faithfully reproduce which option is selected.
 - **No-echo rule** — the replacement must share NO words with the original. An explicit "Wrong" example shows that echoing the original name is not allowed.
 - **Name attention** — special emphasis on names in table cells, form fields, inverted formats ("Last, First"), and after role labels ("Claimant:", "Patient:", etc.).

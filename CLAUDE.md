@@ -65,6 +65,12 @@ The Bedrock prompt instructs the model to return strict JSON:
 ```
 Because the model sometimes wraps output in markdown fences or adds preamble, all parsing goes through `extract_json()` in `utils.py` which tries three fallback strategies before raising.
 
+### Replacement formatting
+Replacement values in `sanitized_text` are wrapped in `@` delimiters (e.g. `@Alex Rivera@`) for easy visual identification and search. The `mapping` rows, summary PDF, and governance JSON store clean values without `@`. The `extract_json()` parser strips `@` from mapping replacement fields if the model includes them.
+
+### Replacement uniqueness
+Every distinct original value must receive a unique replacement — the same replacement is never assigned to two different people/values. This is enforced at two levels: the prompt explicitly instructs the model, and `check_duplicate_replacements()` + `fix_duplicate_replacements()` in `utils.py` catch and fix any violations programmatically. `generate_replacement()` accepts an `existing` set to avoid collisions.
+
 ### Cross-page consistency
 Within a single PDF, the accumulated `mapping` list from all previously processed pages is injected into each subsequent page's prompt. This ensures the same original value always gets the same dummy replacement across pages.
 
