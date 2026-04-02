@@ -135,17 +135,15 @@ def extract_json(raw: str) -> dict:
         if repl.startswith("@") and repl.endswith("@"):
             row["replacement"] = repl[1:-1]
 
-    # Strip business suffixes from Name-type entries (mapping + sanitized_text)
+    # Strip business suffixes from Name-type replacement values only.
+    # original_masked is left unchanged (preserves the model's ground-truth hint).
     text = result.get("sanitized_text", "")
     for row in result.get("mapping", []):
         if row.get("type") == "Name":
-            old_orig = row.get("original_masked", "")
             old_repl = row.get("replacement", "")
-            new_orig = _strip_business_suffix(old_orig)
             new_repl = _strip_business_suffix(old_repl)
             if new_repl != old_repl and old_repl:
                 text = text.replace(f"@{old_repl}@", f"@{new_repl}@")
-            row["original_masked"] = new_orig
             row["replacement"] = new_repl
     result["sanitized_text"] = text
 
