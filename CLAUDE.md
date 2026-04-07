@@ -105,8 +105,12 @@ The sanitization prompt targets exactly these categories:
 - Medical record numbers (MRN, patient ID, chart number)
 - Medical diagnoses / conditions tied to individuals
 - Credit card details (card numbers, expiration dates, CVVs)
+- FEIN / Federal Employer Identification Number (EIN, Tax ID, TIN, Employer ID)
+- State-issued ID numbers (driver's license, state ID card, professional licenses)
+- Professional / government-issued license numbers (nursing license, medical license, DEA number, NPI number)
+- Physical mailing addresses (home/residential addresses, street addresses, personal address labels)
 
-All other data (addresses, insurance/policy/claim numbers, non-DOB dates, facility names, etc.) is explicitly left unchanged.
+Business, facility, hospital, or clinic addresses are left unchanged. All other non-PII data (insurance/policy/claim numbers, non-DOB dates, facility names, etc.) is also explicitly left unchanged.
 
 ### Checkbox / form field handling
 The prompt explicitly instructs the model to preserve checkbox states: `[X]` for checked boxes, `[ ]` for unchecked. Checkmarks (✓, ☑) are transcribed as `[X]`; empty boxes (☐, ○) as `[ ]`. The model must not leave all boxes unchecked.
