@@ -6,6 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 JupyterLab pipeline that redacts PII/PHI from PDFs using AWS Bedrock (Claude claude-3-7-sonnet). Each PDF page is rendered as an image, sent to the vision model, and the model returns sanitized text with realistic fictitious dummy values (not blank redactions) plus a mapping table. Output is three files per source document: a redacted content PDF, a standalone summary PDF listing every replacement made, and a governance JSON log with per-page redaction details for audit/compliance.
 
+## Documentation
+See `.claude/docs/` for detailed learnings, patterns, and context discovered during development.
+
 ## AWS configuration
 
 - **Region:** `us-east-2` (configurable via `AWS_REGION` env var)
