@@ -96,21 +96,30 @@ Each document gets its own log file at `logs/{stem}.log` with complete processin
 `CLEAN_UP = True` in `05_pipeline.ipynb` deletes `temp_images/` PNGs and `redacted_text/` JSONs after each PDF is successfully written. Set to `False` to keep intermediates for debugging.
 
 ### PII/PHI categories
-The sanitization prompt targets exactly these categories:
-- Full names (any format including "Last, First", with role labels like "Claimant:", "Patient:", etc.)
-- Email addresses
-- Phone and fax numbers
-- SSNs / national identifiers
-- Dates of Birth (DOB only — not date of service, date of injury, etc.)
-- Medical record numbers (MRN, patient ID, chart number)
-- Medical diagnoses / conditions tied to individuals
-- Credit card details (card numbers, expiration dates, CVVs)
-- FEIN / Federal Employer Identification Number (EIN, Tax ID, TIN, Employer ID)
-- State-issued ID numbers (driver's license, state ID card, professional licenses)
-- Professional / government-issued license numbers (nursing license, medical license, DEA number, NPI number)
-- Physical mailing addresses (home/residential addresses, street addresses, personal address labels)
+The sanitization prompt targets exactly these categories (canonical type labels in parentheses):
+- Full names (Name) — any format including "Last, First", with role labels like "Claimant:", "Patient:", etc.
+- Email addresses (Email)
+- Phone and fax numbers (Phone)
+- SSNs / national identifiers (SSN)
+- Dates of Birth (DOB) — not date of service, date of injury, etc.
+- Medical record numbers (MRN) — patient ID, chart number
+- Credit card details (CreditCard) — card numbers, expiration dates, CVVs
+- FEIN / Federal Employer Identification Number (FEIN) — EIN, Tax ID, TIN, Employer ID
+- State-issued ID numbers (License) — driver's license, state ID card
+- Professional / government-issued license numbers (License) — nursing license, medical license, DEA number, NPI number
+- Physical mailing addresses (Address) — home/residential addresses, street addresses, personal address labels
 
-Business, facility, hospital, or clinic addresses are left unchanged. All other non-PII data (insurance/policy/claim numbers, non-DOB dates, facility names, etc.) is also explicitly left unchanged.
+All mapping rows use standardized type labels enforced by `normalize_pii_type()` in `utils.py`. The canonical set: `Name`, `Email`, `Phone`, `SSN`, `DOB`, `MRN`, `CreditCard`, `FEIN`, `License`, `Address`.
+
+Medical diagnoses/conditions, business/facility addresses, insurance/policy/claim numbers, non-DOB dates, facility names, etc. are explicitly left unchanged.
+
+### Page flagging for manual review
+Pages are flagged when there's an actual processing failure (not when a page simply has no PII):
+- `non_json_response` — model returned text that couldn't be parsed as JSON (poor scan quality)
+- `all_retries_failed` — all 3 Bedrock attempts failed for a page (page is included with empty text instead of crashing the document)
+- `malformed_response` — JSON parsed but missing required `sanitized_text` or `mapping` fields
+
+Flags are stored per-page in the governance JSON (`pages[].flags`) with a document-level summary (`flagged_pages`, `flagged_page_numbers`). The pipeline logs `MANUAL REVIEW NEEDED` warnings for flagged documents, and the final summary cell reports all documents needing review.
 
 ### Checkbox / form field handling
 The prompt explicitly instructs the model to preserve checkbox states: `[X]` for checked boxes, `[ ]` for unchecked. Checkmarks (✓, ☑) are transcribed as `[X]`; empty boxes (☐, ○) as `[ ]`. The model must not leave all boxes unchecked.

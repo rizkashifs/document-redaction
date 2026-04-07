@@ -66,6 +66,61 @@ def get_logger(name: str, level: int = logging.DEBUG) -> logging.Logger:
     return logger
 
 
+# ── Canonical PII category labels ─────────────────────────────
+
+PII_CATEGORIES = {
+    "Name", "Email", "Phone", "SSN", "DOB", "MRN",
+    "CreditCard", "FEIN", "License", "Address",
+}
+
+_TYPE_NORMALIZE = {
+    # Name
+    "full name": "Name", "person name": "Name", "patient name": "Name",
+    "claimant name": "Name", "provider name": "Name", "name": "Name",
+    # SSN
+    "social security": "SSN", "social security number": "SSN",
+    "national identifier": "SSN", "ssn/national id": "SSN",
+    # Phone
+    "phone number": "Phone", "fax": "Phone", "fax number": "Phone",
+    "telephone": "Phone", "phone/fax": "Phone",
+    # DOB
+    "date of birth": "DOB", "birth date": "DOB", "birthdate": "DOB",
+    # MRN
+    "medical record number": "MRN", "patient id": "MRN",
+    "chart number": "MRN", "medical record": "MRN",
+    # CreditCard
+    "credit card": "CreditCard", "card number": "CreditCard",
+    "credit card number": "CreditCard",
+    # FEIN
+    "ein": "FEIN", "tax id": "FEIN", "tin": "FEIN", "fein": "FEIN",
+    "employer id": "FEIN", "federal employer identification": "FEIN",
+    "federal employer identification number": "FEIN",
+    "tax identification number": "FEIN",
+    # License
+    "driver's license": "License", "dl number": "License",
+    "state id": "License", "professional license": "License",
+    "nursing license": "License", "medical license": "License",
+    "dea number": "License", "npi number": "License", "npi": "License",
+    "license number": "License", "medical record/license number": "License",
+    "license": "License", "driver license": "License",
+    "state id number": "License", "state-issued id": "License",
+    # Address
+    "home address": "Address", "mailing address": "Address",
+    "residential address": "Address", "street address": "Address",
+    "personal address": "Address", "physical address": "Address",
+    "address": "Address",
+    # Email
+    "email address": "Email", "email": "Email", "e-mail": "Email",
+}
+
+
+def normalize_pii_type(raw_type: str) -> str:
+    """Normalize a model-returned PII type to a canonical label."""
+    if raw_type in PII_CATEGORIES:
+        return raw_type
+    return _TYPE_NORMALIZE.get(raw_type.lower().strip(), raw_type)
+
+
 _BUSINESS_SUFFIXES = re.compile(
     r'[,\s]+(INC\.?|LLC\.?|CORP\.?|LTD\.?|L\.?L\.?C\.?|P\.?C\.?|P\.?A\.?|'
     r'PLLC\.?|LLP\.?|CO\.?|COMPANY|CORPORATION|INCORPORATED)\s*$',
@@ -129,11 +184,13 @@ def extract_json(raw: str) -> dict:
             raw, 0
         )
 
-    # Strip @ delimiters from mapping replacement values
+    # Strip @ delimiters from mapping replacement values and normalize types
     for row in result.get("mapping", []):
         repl = row.get("replacement", "")
         if repl.startswith("@") and repl.endswith("@"):
             row["replacement"] = repl[1:-1]
+        if "type" in row:
+            row["type"] = normalize_pii_type(row["type"])
 
     # Strip business suffixes from Name-type replacement values only.
     # original_masked is left unchanged (preserves the model's ground-truth hint).
@@ -176,6 +233,8 @@ def validate_mapping(result: dict) -> list[dict]:
     Check each mapping row for:
     1. Word-overlap between original_masked and replacement (after stripping asterisks).
     2. Replacement that looks like the unmasked original (model echoed the real value).
+    3. One-to-many: single masked pattern replaced with multiple comma-separated values.
+    4. Length mismatch: replacement is drastically longer/shorter than the mask implies.
 
     Returns the list of rows that are violations.
     """
@@ -183,6 +242,7 @@ def validate_mapping(result: dict) -> list[dict]:
     for row in result.get("mapping", []):
         orig_masked = row.get("original_masked", "")
         replacement = row.get("replacement", "")
+        row_type = row.get("type", "")
 
         # Check 0: exact or case-insensitive match (most obvious violation)
         if orig_masked.lower().replace("*", "") == replacement.lower().replace("*", ""):
@@ -206,6 +266,22 @@ def validate_mapping(result: dict) -> list[dict]:
         if "*" in orig_masked and _unmask_matches(orig_masked, replacement):
             violations.append(row)
             continue
+
+        # Check 3: one-to-many — single mask replaced with comma-separated names
+        if row_type == "Name" and "," in replacement:
+            # A single masked pattern should not produce "Name1, Name2"
+            parts = [p.strip() for p in replacement.split(",") if p.strip()]
+            if len(parts) > 1 and all(len(p.split()) >= 1 for p in parts):
+                violations.append(row)
+                continue
+
+        # Check 4: length mismatch — replacement much longer than mask implies
+        if row_type == "Name" and "*" in orig_masked:
+            mask_len = len(orig_masked.replace(" ", ""))
+            repl_len = len(replacement.replace(" ", ""))
+            if repl_len > mask_len * 2.5:
+                violations.append(row)
+                continue
 
     return violations
 
@@ -263,8 +339,16 @@ def generate_replacement(row_type: str, existing: set | None = None) -> str:
             val = f"MRN-{random.randint(100000, 999999)}"
         elif row_type == "CreditCard":
             val = f"XXXX-XXXX-XXXX-{random.randint(1000, 9999)}"
-        elif row_type == "Diagnosis":
-            val = "[Redacted diagnosis]"
+        elif row_type == "FEIN":
+            val = f"{random.randint(10, 99)}-{random.randint(1000000, 9999999)}"
+        elif row_type == "License":
+            val = f"L{random.randint(100000, 999999)}"
+        elif row_type == "Address":
+            _streets = ["Maple", "Oak", "Cedar", "Pine", "Elm", "Birch", "Willow",
+                        "Aspen", "Spruce", "Walnut", "Laurel", "Ivy", "Hazel", "Sage"]
+            _suffixes = ["St", "Ave", "Blvd", "Dr", "Ln", "Ct", "Way", "Rd", "Pl"]
+            val = (f"{random.randint(100, 9999)} {random.choice(_streets)} "
+                   f"{random.choice(_suffixes)}")
         else:
             val = f"[REDACTED-{random.randint(1000, 9999)}]"
 
@@ -544,16 +628,19 @@ meaning the primary model missed them entirely. Only flag these categories:
 - Phone/fax numbers
 - MRN/medical record numbers
 - Credit card numbers
+- FEIN / EIN / Tax ID numbers (XX-XXXXXXX pattern)
+- Driver's license, state ID, or professional license numbers
+- Home/residential/mailing addresses (NOT business/facility addresses)
 
-DO NOT flag: addresses, facility/hospital/company/church/organization names, insurance/policy/claim \
-numbers, employer names, dates of service, or other non-PII values. \
+DO NOT flag: medical diagnoses or conditions, facility/hospital/company/church/organization names, \
+insurance/policy/claim numbers, employer names, dates of service, or other non-PII values. \
 "Pacific Ridge Casualty Company" is an organization — NOT a person's name. \
 "Diocese of Brooklyn" is an organization — NOT a person's name.
 
 Return ONLY valid JSON (no markdown fences):
 {
   "leaks": [
-    {"value": "<the leaked value>", "type": "<Name|SSN|DOB|Email|Phone|MRN|Diagnosis|CreditCard>",
+    {"value": "<the leaked value>", "type": "<Name|SSN|DOB|Email|Phone|MRN|CreditCard|FEIN|License|Address>",
      "reason": "<brief explanation>"}
   ],
   "clean": false
