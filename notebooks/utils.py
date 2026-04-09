@@ -347,8 +347,13 @@ def generate_replacement(row_type: str, existing: set | None = None) -> str:
             _streets = ["Maple", "Oak", "Cedar", "Pine", "Elm", "Birch", "Willow",
                         "Aspen", "Spruce", "Walnut", "Laurel", "Ivy", "Hazel", "Sage"]
             _suffixes = ["St", "Ave", "Blvd", "Dr", "Ln", "Ct", "Way", "Rd", "Pl"]
+            _cities = ["Springfield", "Riverside", "Fairview", "Madison", "Georgetown",
+                       "Clinton", "Franklin", "Arlington", "Bristol", "Ashland"]
+            _states = ["CA", "TX", "FL", "OH", "PA", "IL", "GA", "NC", "MI", "NJ",
+                       "VA", "WA", "AZ", "MA", "TN", "MO", "MD", "WI", "MN", "CO"]
             val = (f"{random.randint(100, 9999)} {random.choice(_streets)} "
-                   f"{random.choice(_suffixes)}")
+                   f"{random.choice(_suffixes)}, {random.choice(_cities)}, "
+                   f"{random.choice(_states)} {random.randint(10000, 99999)}")
         else:
             val = f"[REDACTED-{random.randint(1000, 9999)}]"
 

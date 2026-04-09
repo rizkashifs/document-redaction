@@ -119,7 +119,12 @@ Pages are flagged when there's an actual processing failure (not when a page sim
 - `all_retries_failed` — all 3 Bedrock attempts failed for a page (page is included with empty text instead of crashing the document)
 - `malformed_response` — JSON parsed but missing required `sanitized_text` or `mapping` fields
 
+Flagged pages render a placeholder message in the output PDF (e.g. "[Page 3 could not be processed automatically. Flags: non_json_response. Manual review required.]") instead of raw/broken text.
+
 Flags are stored per-page in the governance JSON (`pages[].flags`) with a document-level summary (`flagged_pages`, `flagged_page_numbers`). The pipeline logs `MANUAL REVIEW NEEDED` warnings for flagged documents, and the final summary cell reports all documents needing review.
+
+### Output file naming
+Output files use sequential numeric IDs (`DOC-001`, `DOC-002`, ...) instead of original filenames to prevent PII leakage through sensitive filenames. A lookup table at `output_folder/document_id_lookup.json` maps each ID back to its original filename. Output files follow the pattern: `redacted_DOC-001.pdf`, `summary_DOC-001.pdf`, `governance_DOC-001.json`.
 
 ### Checkbox / form field handling
 The prompt explicitly instructs the model to preserve checkbox states: `[X]` for checked boxes, `[ ]` for unchecked. Checkmarks (✓, ☑) are transcribed as `[X]`; empty boxes (☐, ○) as `[ ]`. The model must not leave all boxes unchecked.
